@@ -1,18 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
+import PySide6
+import shiboken6
+
 block_cipher = None
 ROOT = Path(SPECPATH).resolve().parent
+
+
+def _package_binaries(package, dest: str):
+    folder = Path(package.__file__).resolve().parent
+    collected = []
+    for pattern in ("*.pyd", "*.dll"):
+        for file in folder.glob(pattern):
+            collected.append((str(file), dest))
+    return collected
+
+
+# The venv may contain a copied (non-pip) PySide6/shiboken6 tree. PyInstaller's
+# analysis does not import shiboken6.Shiboken unless we collect the .pyd explicitly.
+extra_binaries = _package_binaries(shiboken6, "shiboken6") + _package_binaries(PySide6, "PySide6")
 
 a = Analysis(
     [str(ROOT / "run.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=extra_binaries,
+    # The stylesheet is generated from app/ui/palette.py and the icons are drawn
+    # with QPainter, so neither ships as a data file any more -- only the fonts do.
     datas=[
-        (str(ROOT / "app" / "ui" / "style.qss"), "app/ui"),
-        (str(ROOT / "app" / "ui" / "style-dark.qss"), "app/ui"),
         (str(ROOT / "app" / "ui" / "resources" / "fonts"), "app/ui/resources/fonts"),
-        (str(ROOT / "app" / "ui" / "resources" / "icons"), "app/ui/resources/icons"),
         (str(ROOT / "migrations"), "migrations"),
         (str(ROOT / "portable.txt"), "."),
     ],
@@ -20,6 +36,14 @@ a = Analysis(
         "app.db.models",
         "app.ui.main_window",
         "app.ui.icons",
+        "app.ui.palette",
+        "app.ui.stylesheet",
+        "shiboken6",
+        "shiboken6.Shiboken",
+        "PySide6.QtCore",
+        "PySide6.QtGui",
+        "PySide6.QtWidgets",
+        "PySide6.QtNetwork",
         "PySide6.QtPrintSupport",
     ],
     hookspath=[],
