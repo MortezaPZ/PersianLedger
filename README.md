@@ -37,5 +37,3 @@ python -m venv .venv
 ```powershell
 .\.venv\Scripts\python -m pytest tests -q
 ```
-
-نسخهٔ جاری: **۰٫۶٫۰**. تحویل به کارفرما: `docs/checklist-section-3-fa.md`.
