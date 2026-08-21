@@ -9,6 +9,7 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QComboBox, QCompleter, QStyledItemDelegate, QStyle
 
 from app.domain import money
+from app.ui import theme
 from app.ui.refdata import RefData
 
 COL_NO, COL_ACCOUNT, COL_T1, COL_T2, COL_CURRENCY, COL_DEBIT, COL_CREDIT, COL_DESC = range(8)
@@ -75,9 +76,9 @@ class LineGridModel(QAbstractTableModel):
             if column in (COL_NO, COL_CURRENCY):
                 return int(Qt.AlignCenter)
         if role == Qt.ForegroundRole and column in (COL_T1, COL_T2) and not self.ref.slot_enabled(row.account_id, 1 if column == COL_T1 else 2):
-            return QBrush(QColor("#9aa5b5"))
+            return QBrush(QColor(theme.current_palette().text_faint))
         if role == Qt.BackgroundRole and (row.debit or row.credit) == 0 and row.account_id:
-            return QBrush(QColor("#fff7e8"))
+            return QBrush(QColor(theme.current_palette().draft_row))
         return None
 
     def _text(self, position: int, row: LineRow, column: int, editing: bool) -> str:

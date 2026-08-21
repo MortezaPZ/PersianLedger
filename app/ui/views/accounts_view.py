@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -146,6 +147,14 @@ class AccountsView(BaseView):
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["کد / عنوان", "نوع", "وضعیت"])
         self.tree.itemDoubleClicked.connect(lambda *_: self.edit())
+        # The name column carries the hierarchy and needs the room; otherwise
+        # the last column stretches by default and elides the account titles.
+        header = self.tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.tree.setAlternatingRowColors(True)
         self.body.addWidget(self.tree)
         self.reload()
 

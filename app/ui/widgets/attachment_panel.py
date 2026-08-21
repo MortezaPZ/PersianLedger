@@ -18,7 +18,7 @@ class AttachmentPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         title = QLabel("پیوست‌ها")
-        title.setStyleSheet("font-weight:bold;")
+        title.setObjectName("SectionTitle")
         layout.addWidget(title)
         self.list = QListWidget()
         self.list.itemDoubleClicked.connect(self.open_selected)

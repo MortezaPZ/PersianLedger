@@ -25,13 +25,14 @@ from app.domain.errors import LedgerError
 from app.services import backup_service, master_data
 from app.ui import theme
 from app.ui.views.base_view import BaseView
-from app.ui.widgets.tables import fit_columns
+from app.ui.widgets.tables import fit_columns, size_to_rows
 from app.version import APP_NAME_FA, APP_VERSION
 
 
 class SettingsView(BaseView):
     title = "ارزها و سال مالی"
     hint = "تعریف ارز، سال مالی، پشتیبان‌گیری و بازیابی"
+    scrollable = True  # currencies + years + appearance + backups exceed one screen
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
@@ -43,9 +44,13 @@ class SettingsView(BaseView):
         for table in (self.currency_table, self.year_table):
             table.setSelectionBehavior(QAbstractItemView.SelectRows)
             table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.body.addWidget(QLabel("ارزها"))
+        currencies_title = QLabel("ارزها")
+        currencies_title.setObjectName("SectionTitle")
+        years_title = QLabel("سال مالی")
+        years_title.setObjectName("SectionTitle")
+        self.body.addWidget(currencies_title)
         self.body.addWidget(self.currency_table)
-        self.body.addWidget(QLabel("سال مالی"))
+        self.body.addWidget(years_title)
         self.body.addWidget(self.year_table)
         appearance = QGroupBox("ظاهر")
         appear_layout = QVBoxLayout(appearance)
@@ -93,6 +98,11 @@ class SettingsView(BaseView):
         app = QApplication.instance()
         if app:
             theme.apply(app, dark=bool(on))
+        # The stylesheet reloads on its own, but icons already handed to the nav
+        # buttons keep the previous theme's colour until they are redrawn.
+        window = self.window()
+        if hasattr(window, "restyle_nav"):
+            window.restyle_nav()
 
     def reload(self) -> None:
         with self.ctx.read_session() as db:
@@ -112,8 +122,9 @@ class SettingsView(BaseView):
             self.backup_table.setItem(r, 0, QTableWidgetItem(b.path.name))
             self.backup_table.setItem(r, 1, QTableWidgetItem(b.size_text))
             self.backup_table.setItem(r, 2, QTableWidgetItem(str(b.taken_at)))
-        fit_columns(self.currency_table)
-        fit_columns(self.year_table)
+        for table in (self.currency_table, self.year_table, self.backup_table):
+            fit_columns(table)
+            size_to_rows(table)
         engine = engine_module.get_engine()
         rev = migrate.current_revision(engine)
         self.about_label.setText(
@@ -143,6 +154,9 @@ class SettingsView(BaseView):
         path, _ = QFileDialog.getOpenFileName(self, "بازیابی از فایل", str(self.ctx.config.backup_dir), "SQLite (*.sqlite3 *.db)")
         if not path or not self.confirm("بازیابی فایل پشتیبان، دیتابیس فعلی را جایگزین می‌کند. ادامه می‌دهید؟"):
             return
+        self.apply_restore(Path(path))
+
+    def apply_restore(self, path: Path) -> None:
         try:
             safety = backup_service.restore(engine_module.get_engine(), self.ctx.config, Path(path))
             engine_module.init_engine(self.ctx.config)

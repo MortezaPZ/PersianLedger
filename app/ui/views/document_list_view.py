@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem
 
 from app.domain.enums import DOCUMENT_STATUS_FA, DOCUMENT_TYPE_FA, DocumentStatus, DocumentType
@@ -8,6 +9,7 @@ from app.domain.errors import LedgerError
 from app.db.models import Document
 from app.domain import jalali
 from app.services import document_service
+from app.ui import theme
 from app.ui.views.base_view import BaseView
 from app.ui.widgets.jalali_date_edit import JalaliDateEdit
 from app.ui.widgets.tables import fit_columns
@@ -71,12 +73,13 @@ class DocumentListView(BaseView):
                 for doc in docs
             ]
         self.table.setRowCount(len(rows))
+        draft_tint = QBrush(QColor(theme.current_palette().draft_row))
         for r, (doc_id, *values, status) in enumerate(rows):
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, doc_id)
                 if status == DocumentStatus.DRAFT:
-                    item.setBackground(Qt.yellow)
+                    item.setBackground(draft_tint)
                 self.table.setItem(r, c, item)
         fit_columns(self.table)
 

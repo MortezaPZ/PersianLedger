@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from app.ui.context import AppContext
 from app.version import APP_NAME_FA
@@ -9,6 +18,9 @@ from app.version import APP_NAME_FA
 class BaseView(QWidget):
     title = ""
     hint = ""
+    #: Pages taller than the window set this so their content scrolls instead
+    #: of being cut off at the bottom edge.
+    scrollable = False
 
     def __init__(self, context: AppContext, parent=None) -> None:
         super().__init__(parent)
@@ -34,7 +46,18 @@ class BaseView(QWidget):
         root.addWidget(header)
         self.body = QVBoxLayout()
         self.body.setSpacing(12)
-        root.addLayout(self.body, 1)
+        if self.scrollable:
+            canvas = QWidget()
+            canvas.setObjectName("FilterField")  # transparent
+            canvas.setLayout(self.body)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            scroll.setWidget(canvas)
+            root.addWidget(scroll, 1)
+        else:
+            root.addLayout(self.body, 1)
 
     def add_action(self, widget) -> None:
         self.header_actions.addWidget(widget)
