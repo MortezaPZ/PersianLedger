@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QAbstractItemView, QComboBox, QLabel, QTableView
 from app.domain import money
 from app.export import excel, printing
 from app.services.report_service import StatementFilter, account_statement
+from app.ui import theme
 from app.ui.views.report_base import ReportView
 from app.ui.widgets.tables import fit_columns
 
@@ -47,7 +48,7 @@ class StatementModel(QAbstractTableModel):
         if role == Qt.TextAlignmentRole:
             return int(Qt.AlignRight | Qt.AlignVCenter)
         if role == Qt.BackgroundRole and (row.is_draft or row.is_opening):
-            return QBrush(QColor("#fff7e8"))
+            return QBrush(QColor(theme.current_palette().draft_row))
         if role != Qt.DisplayRole:
             return None
         fixed = [row.date_j, row.number, row.doc_type, row.description, f"{row.account_code} {row.account_name}".strip(), row.tafsili]
@@ -71,18 +72,13 @@ class StatementView(ReportView):
         self.from_date, self.to_date = self.make_date_range()
         self.account = QComboBox(); self.account.setEditable(True)
         self.tafsili = QComboBox(); self.tafsili.setEditable(True)
-        self.filter_grid.addWidget(QLabel("سرفصل:"), 0, 0)
-        self.filter_grid.addWidget(self.account, 0, 1)
-        self.filter_grid.addWidget(QLabel("تفصیلی:"), 0, 2)
-        self.filter_grid.addWidget(self.tafsili, 0, 3)
-        self.filter_grid.addWidget(QLabel("از تاریخ:"), 1, 0)
-        self.filter_grid.addWidget(self.from_date, 1, 1)
-        self.filter_grid.addWidget(QLabel("تا تاریخ:"), 1, 2)
-        self.filter_grid.addWidget(self.to_date, 1, 3)
-        self.filter_grid.addWidget(QLabel("ارزها:"), 0, 4)
-        self.filter_grid.addWidget(self.make_currency_list(), 0, 5, 2, 1)
-        self.filter_grid.addWidget(self.make_group_list(), 1, 4)
-        self.filter_grid.addWidget(self.make_drafts_combo(), 1, 5)
+        self.add_filter("سرفصل", self.account)
+        self.add_filter("تفصیلی", self.tafsili)
+        self.add_filter("از تاریخ", self.from_date)
+        self.add_filter("تا تاریخ", self.to_date)
+        self.add_filter("ارزها", self.make_currency_list())
+        self.add_filter("گروه تفصیلی", self.make_group_list())
+        self.finish_filters()
         self.model = StatementModel()
         self.table = QTableView()
         self.table.setModel(self.model)

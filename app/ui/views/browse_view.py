@@ -45,13 +45,10 @@ class BrowseView(ReportView):
         self._level = lr.LEVEL_GROUP
         self._trail: list[tuple[int, str, str]] = []
         self.from_date, self.to_date = self.make_date_range()
-        self.filter_grid.addWidget(QLabel("از تاریخ:"), 0, 0)
-        self.filter_grid.addWidget(self.from_date, 0, 1)
-        self.filter_grid.addWidget(QLabel("تا تاریخ:"), 0, 2)
-        self.filter_grid.addWidget(self.to_date, 0, 3)
-        self.filter_grid.addWidget(QLabel("ارزها:"), 0, 4)
-        self.filter_grid.addWidget(self.make_currency_list(), 0, 5)
-        self.filter_grid.addWidget(self.make_drafts_combo(), 1, 1)
+        self.add_filter("از تاریخ", self.from_date)
+        self.add_filter("تا تاریخ", self.to_date)
+        self.add_filter("ارزها", self.make_currency_list())
+        self.finish_filters()
 
         chrome = QFrame()
         chrome.setObjectName("BrowseChrome")

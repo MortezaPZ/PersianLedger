@@ -8,6 +8,7 @@ from app.domain import money
 from app.export import excel, printing
 from app.services import ledger_reports as lr
 from app.services.report_service import StatementFilter
+from app.ui import theme
 from app.ui.views.report_base import ReportView
 from app.ui.widgets.tables import fit_columns
 
@@ -44,7 +45,8 @@ class JournalModel(QAbstractTableModel):
             return None
         row = self.result.rows[index.row()]
         if role == Qt.BackgroundRole and row.kind != "line":
-            return QBrush(QColor("#e8eef7" if row.kind == "subtotal" else "#fff7e8"))
+            pal = theme.current_palette()
+            return QBrush(QColor(pal.subtotal_row if row.kind == "subtotal" else pal.draft_row))
         if role == Qt.TextAlignmentRole:
             return int(Qt.AlignRight | Qt.AlignVCenter)
         if role != Qt.DisplayRole:
@@ -68,13 +70,11 @@ class JournalView(ReportView):
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.from_date, self.to_date = self.make_date_range()
-        self.filter_grid.addWidget(QLabel("از تاریخ:"), 0, 0)
-        self.filter_grid.addWidget(self.from_date, 0, 1)
-        self.filter_grid.addWidget(QLabel("تا تاریخ:"), 0, 2)
-        self.filter_grid.addWidget(self.to_date, 0, 3)
-        self.filter_grid.addWidget(self.make_currency_list(), 0, 4)
-        self.filter_grid.addWidget(self.make_group_list(), 0, 5)
-        self.filter_grid.addWidget(self.make_drafts_combo(), 1, 1)
+        self.add_filter("از تاریخ", self.from_date)
+        self.add_filter("تا تاریخ", self.to_date)
+        self.add_filter("ارزها", self.make_currency_list())
+        self.add_filter("گروه تفصیلی", self.make_group_list())
+        self.finish_filters()
         self.model = JournalModel()
         self.table = QTableView(); self.table.setModel(self.model)
         self.table.setAlternatingRowColors(True)

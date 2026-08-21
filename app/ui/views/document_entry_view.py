@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -22,6 +23,7 @@ from app.domain.enums import DOCUMENT_TYPE_FA, DocumentType
 from app.domain.errors import LedgerError
 from app.services import document_service, master_data
 from app.ui.views.base_view import BaseView
+from app.ui.widgets import fields
 from app.ui.widgets.attachment_panel import AttachmentPanel
 from app.ui.widgets.jalali_date_edit import JalaliDateEdit
 from app.ui.widgets.line_grid import (
@@ -49,9 +51,9 @@ class DocumentEntryView(BaseView):
         card = QFrame()
         card.setObjectName("Card")
         grid = QGridLayout(card)
-        grid.setContentsMargins(12, 12, 12, 12)
-        grid.setHorizontalSpacing(12)
-        grid.setVerticalSpacing(8)
+        grid.setContentsMargins(16, 14, 16, 14)
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(10)
         self.number_edit = QLineEdit()
         self.number_edit.setReadOnly(True)
         self.date_edit = JalaliDateEdit()
@@ -61,16 +63,13 @@ class DocumentEntryView(BaseView):
                 self.type_combo.addItem(label, item)
         self.desc_edit = QLineEdit()
         self.year_combo = QComboBox()
-        grid.addWidget(QLabel("شماره سند"), 0, 0)
-        grid.addWidget(self.number_edit, 0, 1)
-        grid.addWidget(QLabel("تاریخ"), 0, 2)
-        grid.addWidget(self.date_edit, 0, 3)
-        grid.addWidget(QLabel("نوع سند"), 1, 0)
-        grid.addWidget(self.type_combo, 1, 1)
-        grid.addWidget(QLabel("سال مالی"), 1, 2)
-        grid.addWidget(self.year_combo, 1, 3)
-        grid.addWidget(QLabel("شرح سند"), 2, 0)
-        grid.addWidget(self.desc_edit, 2, 1, 1, 3)
+        grid.addWidget(fields.labeled("شماره سند", self.number_edit), 0, 0)
+        grid.addWidget(fields.labeled("تاریخ", self.date_edit), 0, 1)
+        grid.addWidget(fields.labeled("نوع سند", self.type_combo), 0, 2)
+        grid.addWidget(fields.labeled("سال مالی", self.year_combo), 0, 3)
+        grid.addWidget(fields.labeled("شرح سند", self.desc_edit), 1, 0, 1, 4)
+        for column in range(4):
+            grid.setColumnStretch(column, 1)
         self.body.addWidget(card)
         self.model = LineGridModel(self.ctx.refdata)
         self.table = QTableView()
@@ -116,14 +115,21 @@ class DocumentEntryView(BaseView):
         bottom = QHBoxLayout()
         self.balance = QLabel()
         self.balance.setObjectName("BalanceBar")
-        bottom.addWidget(self.balance, 1)
+        self.balance.setWordWrap(True)
+        # Without this the label stretches to match the attachment panel beside
+        # it and turns into a large empty slab.
+        self.balance.setAlignment(Qt.AlignRight | Qt.AlignTop)
+        self.balance.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        bottom.addWidget(self.balance, 1, Qt.AlignTop)
         self.attachments = AttachmentPanel(self.ctx)
+        self.attachments.setMaximumHeight(180)
         bottom.addWidget(self.attachments)
         self.body.addLayout(bottom)
         self.model.totalsChanged.connect(self._refresh_balance)
         self.ctx.refdataChanged.connect(self.refresh)
         self.refresh()
-        fit_columns(self.table)
+        # Trailing column is the line description; let it take the spare width.
+        fit_columns(self.table, stretch_last=True)
 
     def refresh(self) -> None:
         self.year_combo.clear()

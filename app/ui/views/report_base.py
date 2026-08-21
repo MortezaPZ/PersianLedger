@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from app.export import printing
 from app.ui.views.base_view import BaseView
+from app.ui.widgets import fields
 from app.ui.widgets.jalali_date_edit import JalaliDateEdit
 
 
@@ -42,16 +43,38 @@ class ReportView(BaseView):
         self.filters = QFrame()
         self.filters.setObjectName("Card")
         self.filter_grid = QGridLayout(self.filters)
-        self.filter_grid.setContentsMargins(12, 12, 12, 12)
-        self.filter_grid.setHorizontalSpacing(12)
-        self.filter_grid.setVerticalSpacing(8)
+        self.filter_grid.setContentsMargins(16, 14, 16, 14)
+        self.filter_grid.setHorizontalSpacing(16)
+        self.filter_grid.setVerticalSpacing(12)
+        self._filter_slot = 0
         self.body.addWidget(self.filters)
-        self.include_opening = QCheckBox("نمایش مانده قبل از بازه")
-        self.include_opening.setChecked(True)
-        self.filter_grid.addWidget(self.include_opening, 0, 6)
         self.summary = QLabel()
         self.summary.setObjectName("SummaryLine")
         self.body.addWidget(self.summary)
+        self.include_opening = QCheckBox("نمایش مانده قبل از بازه")
+        self.include_opening.setChecked(True)
+
+    # ------------------------------------------------------------------
+    # Filter bar
+    #
+    # Filters flow into a fixed-column grid instead of hand-picked (row, col)
+    # coordinates.  Every cell is top-aligned, so a tall control (a currency
+    # list) no longer drags its short neighbours out of line.
+    # ------------------------------------------------------------------
+    FILTER_COLUMNS = 4
+
+    def add_filter(self, label: str, widget: QWidget) -> QWidget:
+        group = fields.labeled(label, widget)
+        row, col = divmod(self._filter_slot, self.FILTER_COLUMNS)
+        self.filter_grid.addWidget(group, row, col, Qt.AlignTop)
+        self.filter_grid.setColumnStretch(col, 1)
+        self._filter_slot += 1
+        return group
+
+    def finish_filters(self) -> None:
+        """Place the shared options after the view's own filters."""
+        self.add_filter("اسناد", self.make_drafts_combo())
+        self.add_filter("", self.include_opening)
 
     def make_date_range(self) -> tuple[JalaliDateEdit, JalaliDateEdit]:
         self.from_date = JalaliDateEdit()
@@ -60,36 +83,30 @@ class ReportView(BaseView):
         self.to_date.clear()
         return self.from_date, self.to_date
 
-    def make_currency_list(self) -> QWidget:
+    @staticmethod
+    def _checkable_list(hint_text: str) -> tuple[QWidget, QListWidget]:
         box = QWidget()
+        box.setObjectName("FilterField")
         layout = QVBoxLayout(box)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        self.currency_list = QListWidget()
-        self.currency_list.setSelectionMode(QAbstractItemView.NoSelection)
-        self.currency_list.setMaximumHeight(90)
-        self.currency_list.setMinimumWidth(160)
-        hint = QLabel("هیچ‌کدام تیک نخورد = همه ارزها، هر کدام در ستون خودش")
-        hint.setStyleSheet("color:#6b7a90; font-size:11px;")
+        listing = QListWidget()
+        listing.setSelectionMode(QAbstractItemView.NoSelection)
+        listing.setFixedHeight(104)  # three rows plus padding, so nothing clips
+        listing.setMinimumWidth(150)
+        hint = QLabel(hint_text)
+        hint.setObjectName("Hint")  # themed, so it stays legible in dark mode
         hint.setWordWrap(True)
-        layout.addWidget(self.currency_list)
+        layout.addWidget(listing)
         layout.addWidget(hint)
+        return box, listing
+
+    def make_currency_list(self) -> QWidget:
+        box, self.currency_list = self._checkable_list("بدون تیک = همهٔ ارزها، هر کدام در ستون خودش")
         return box
 
     def make_group_list(self) -> QWidget:
-        box = QWidget()
-        layout = QVBoxLayout(box)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-        self.group_list = QListWidget()
-        self.group_list.setSelectionMode(QAbstractItemView.NoSelection)
-        self.group_list.setMaximumHeight(90)
-        self.group_list.setMinimumWidth(160)
-        hint = QLabel("هیچ‌کدام تیک نخورد = بدون فیلتر گروه")
-        hint.setStyleSheet("color:#6b7a90; font-size:11px;")
-        hint.setWordWrap(True)
-        layout.addWidget(self.group_list)
-        layout.addWidget(hint)
+        box, self.group_list = self._checkable_list("بدون تیک = بدون فیلتر گروه")
         return box
 
     def reload_groups(self) -> None:

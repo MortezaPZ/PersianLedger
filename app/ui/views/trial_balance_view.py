@@ -8,6 +8,7 @@ from app.domain import money
 from app.export import excel, printing
 from app.services import ledger_reports as lr
 from app.services.report_service import StatementFilter
+from app.ui import theme
 from app.ui.views.report_base import ReportView
 from app.ui.widgets.tables import fit_columns
 
@@ -47,7 +48,7 @@ class TrialBalanceModel(QAbstractTableModel):
             return None
         row = self.result.rows[index.row()]
         if role == Qt.BackgroundRole and row.kind == "total":
-            return QBrush(QColor("#fff7e8"))
+            return QBrush(QColor(theme.current_palette().subtotal_row))
         if role == Qt.TextAlignmentRole:
             return int(Qt.AlignRight | Qt.AlignVCenter)
         if role != Qt.DisplayRole:
@@ -79,19 +80,13 @@ class TrialBalanceView(ReportView):
         for n in (2, 4, 6):
             self.columns.addItem(f"{n} ستونی", n)
         self.columns.setCurrentIndex(1)
-        self.filter_grid.addWidget(QLabel("از تاریخ:"), 0, 0)
-        self.filter_grid.addWidget(self.from_date, 0, 1)
-        self.filter_grid.addWidget(QLabel("تا تاریخ:"), 0, 2)
-        self.filter_grid.addWidget(self.to_date, 0, 3)
-        self.filter_grid.addWidget(QLabel("سطح:"), 1, 0)
-        self.filter_grid.addWidget(self.level, 1, 1)
-        self.filter_grid.addWidget(QLabel("ستون‌ها:"), 1, 2)
-        self.filter_grid.addWidget(self.columns, 1, 3)
-        self.filter_grid.addWidget(QLabel("ارزها:"), 0, 4)
-        self.filter_grid.addWidget(self.make_currency_list(), 0, 5, 2, 1)
-        self.filter_grid.addWidget(QLabel("گروه تفصیلی:"), 1, 4)
-        self.filter_grid.addWidget(self.make_group_list(), 1, 5)
-        self.filter_grid.addWidget(self.make_drafts_combo(), 0, 6)
+        self.add_filter("از تاریخ", self.from_date)
+        self.add_filter("تا تاریخ", self.to_date)
+        self.add_filter("سطح", self.level)
+        self.add_filter("ستون‌ها", self.columns)
+        self.add_filter("ارزها", self.make_currency_list())
+        self.add_filter("گروه تفصیلی", self.make_group_list())
+        self.finish_filters()
         self.model = TrialBalanceModel()
         self.table = QTableView()
         self.table.setModel(self.model)

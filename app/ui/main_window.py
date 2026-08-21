@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, QSize, Qt
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from app.db import engine as engine_module
 from app.services import backup_service
 from app.ui.context import AppContext
-from app.ui import icons
+from app.ui import icons, theme
 from app.ui.views.accounts_view import AccountsView
 from app.ui.views.audit_view import AuditView
 from app.ui.views.browse_view import BrowseView
@@ -74,9 +74,11 @@ def clamp_to_screen(window: QMainWindow) -> None:
     screen = QGuiApplication.primaryScreen().availableGeometry()
     geo = window.frameGeometry()
     if geo.width() > screen.width() or geo.height() > screen.height() or not screen.intersects(geo):
-        window.resize(min(window.width(), screen.width()), min(window.height(), screen.height()))
-        frame = window.frameGeometry()
-        window.move(screen.center() - frame.center())
+        width = min(max(window.width(), 1), screen.width())
+        height = min(max(window.height(), 1), screen.height())
+        x = screen.x() + max(0, (screen.width() - width) // 2)
+        y = screen.y() + max(0, (screen.height() - height) // 2)
+        window.setGeometry(x, y, width, height)
 
 
 class MainWindow(QMainWindow):
@@ -106,37 +108,58 @@ class MainWindow(QMainWindow):
         self.go_to(0)
 
     def _build_nav(self) -> QWidget:
+        pal = theme.current_palette()
         panel = QFrame()
         panel.setObjectName("NavPanel")
-        panel.setFixedWidth(232)
+        panel.setFixedWidth(244)
         outer = QVBoxLayout(panel)
         outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        header = QWidget()
+        header.setObjectName("NavHeader")
+        head = QVBoxLayout(header)
+        head.setContentsMargins(18, 18, 18, 16)
+        head.setSpacing(2)
         title = QLabel(APP_NAME_FA); title.setObjectName("NavTitle")
         sub = QLabel(f"نسخه {APP_VERSION}"); sub.setObjectName("NavSubtitle")
-        outer.addWidget(title); outer.addWidget(sub)
+        head.addWidget(title); head.addWidget(sub)
+        outer.addWidget(header)
+
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         inner = QWidget(); inner.setObjectName("NavInner")
-        col = QVBoxLayout(inner); col.setContentsMargins(0, 0, 0, 8)
+        col = QVBoxLayout(inner); col.setContentsMargins(0, 4, 0, 12); col.setSpacing(0)
         self.buttons = QButtonGroup(self); self.buttons.setExclusive(True)
+        self._nav_buttons: list[tuple[QPushButton, str]] = []
         index = 0
         for section, pages in SECTIONS:
             label = QLabel(section); label.setObjectName("NavSection"); col.addWidget(label)
             for key, title_text, shortcut, _cls in pages:
                 btn = QPushButton(title_text)
-                btn.setIcon(icons.page_icon(key))
-                btn.setIconSize(btn.iconSize())
+                btn.setIcon(icons.page_icon(key, pal.ink_text))
+                btn.setIconSize(QSize(18, 18))
                 btn.setCheckable(True)
-                btn.setToolTip(shortcut)
+                btn.setToolTip(f"{title_text}  ({shortcut})")
                 btn.setCursor(Qt.PointingHandCursor)
                 self.buttons.addButton(btn, index)
                 btn.clicked.connect(lambda _=False, i=index: self.go_to(i))
                 QShortcut(QKeySequence(shortcut), self, activated=lambda i=index: self.go_to(i))
                 col.addWidget(btn)
+                self._nav_buttons.append((btn, key))
                 index += 1
         col.addStretch()
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
         return panel
+
+    def restyle_nav(self) -> None:
+        """Re-tint the nav icons after a theme change (active one stays white)."""
+        pal = theme.current_palette()
+        icons.clear_cache()
+        for btn, key in getattr(self, "_nav_buttons", ()):
+            colour = pal.text_on_brand if btn.isChecked() else pal.ink_text
+            btn.setIcon(icons.page_icon(key, colour))
 
     def _wire(self) -> None:
         entry: DocumentEntryView = self.views[0]
@@ -171,6 +194,7 @@ class MainWindow(QMainWindow):
         btn = self.buttons.button(index)
         if btn:
             btn.setChecked(True)
+        self.restyle_nav()
         view = self.views[index]
         if hasattr(view, "refresh"):
             view.refresh()
@@ -181,19 +205,32 @@ class MainWindow(QMainWindow):
         if geometry:
             self.restoreGeometry(geometry)
 
-    def closeEvent(self, event) -> None:
+    def _make_exit_backup_box(self) -> QMessageBox:
         box = QMessageBox(self)
         box.setWindowTitle(APP_NAME_FA)
         box.setText("آیا می‌خواهید قبل از خروج یک نسخه پشتیبان تهیه شود؟")
-        yes = box.addButton("بله", QMessageBox.YesRole)
-        no = box.addButton("خیر", QMessageBox.NoRole)
-        cancel = box.addButton("انصراف", QMessageBox.RejectRole)
+        box.addButton("بله", QMessageBox.YesRole)
+        box.addButton("خیر", QMessageBox.NoRole)
+        box.addButton("انصراف", QMessageBox.RejectRole)
+        return box
+
+    def _query_exit_backup(self) -> str:
+        box = self._make_exit_backup_box()
         box.exec()
         clicked = box.clickedButton()
-        if clicked is cancel:
+        role = box.buttonRole(clicked) if clicked is not None else QMessageBox.RejectRole
+        if role == QMessageBox.RejectRole:
+            return "cancel"
+        if role == QMessageBox.YesRole:
+            return "yes"
+        return "no"
+
+    def closeEvent(self, event) -> None:
+        choice = self._query_exit_backup()
+        if choice == "cancel":
             event.ignore()
             return
-        if clicked is yes:
+        if choice == "yes":
             try:
                 info = backup_service.create(engine_module.get_engine(), self.ctx.config)
                 QMessageBox.information(self, APP_NAME_FA, f"پشتیبان ذخیره شد:\n{info.path}")
