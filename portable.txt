@@ -1,0 +1,2 @@
+This file marks a portable (ZIP) layout.
+The app stores data in a `data` folder next to PersianLedger.exe.
