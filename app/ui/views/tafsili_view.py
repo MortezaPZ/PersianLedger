@@ -180,16 +180,24 @@ class TafsiliView(BaseView):
 
     def reload(self) -> None:
         gid = self.filter.currentData()
+        groups = {g.id: g for g in self.ctx.refdata.groups}
         with self.ctx.read_session() as db:
             rows = master_data.tafsilis(db, group_id=gid)
-        self.table.setRowCount(len(rows))
-        groups = {g.id: g for g in self.ctx.refdata.groups}
-        for r, item in enumerate(rows):
-            extras = [groups[i].name for i in item.group_ids if i != item.group_id and i in groups]
-            values = [item.code, item.name, item.group.name if item.group else "", "، ".join(extras), "فعال" if item.is_active else "غیرفعال"]
+            payload = []
+            for item in rows:
+                extras = [groups[i].name for i in item.group_ids if i != item.group_id and i in groups]
+                home = groups[item.group_id].name if item.group_id in groups else ""
+                payload.append(
+                    (
+                        item.id,
+                        [item.code, item.name, home, "، ".join(extras), "فعال" if item.is_active else "غیرفعال"],
+                    )
+                )
+        self.table.setRowCount(len(payload))
+        for r, (ident, values) in enumerate(payload):
             for c, value in enumerate(values):
                 cell = QTableWidgetItem(value)
-                cell.setData(Qt.UserRole, item.id)
+                cell.setData(Qt.UserRole, ident)
                 self.table.setItem(r, c, cell)
         fit_columns(self.table)
 

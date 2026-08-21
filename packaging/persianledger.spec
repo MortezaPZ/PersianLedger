@@ -20,7 +20,6 @@ a = Analysis(
         "app.db.models",
         "app.ui.main_window",
         "app.ui.icons",
-        "PySide6.QtSvg",
         "PySide6.QtPrintSupport",
     ],
     hookspath=[],
@@ -46,3 +45,9 @@ exe = EXE(
     console=False,
 )
 coll = COLLECT(exe, a.binaries, a.zipfiles, a.datas, strip=False, upx=False, name="PersianLedger")
+
+import shutil
+
+_dist = Path(DISTPATH) / "PersianLedger"
+_dist.mkdir(parents=True, exist_ok=True)
+shutil.copy2(ROOT / "portable.txt", _dist / "portable.txt")

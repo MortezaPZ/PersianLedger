@@ -115,7 +115,8 @@ class MainWindow(QMainWindow):
         sub = QLabel(f"نسخه {APP_VERSION}"); sub.setObjectName("NavSubtitle")
         outer.addWidget(title); outer.addWidget(sub)
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
-        inner = QWidget(); col = QVBoxLayout(inner); col.setContentsMargins(0, 0, 0, 8)
+        inner = QWidget(); inner.setObjectName("NavInner")
+        col = QVBoxLayout(inner); col.setContentsMargins(0, 0, 0, 8)
         self.buttons = QButtonGroup(self); self.buttons.setExclusive(True)
         index = 0
         for section, pages in SECTIONS:

@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QRectF, QSize
-from PySide6.QtGui import QIcon, QPainter, QPixmap
-from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
+from PySide6.QtCore import QSize, Qt
 
 ICONS_DIR = Path(__file__).resolve().parent / "resources" / "icons"
 
@@ -24,20 +23,21 @@ PAGE_ICONS = {
 }
 
 
-def pixmap(name: str, color: str = "#d5deea", size: int = 18) -> QPixmap:
-    path = ICONS_DIR / f"{name}.svg"
-    data = path.read_text(encoding="utf-8").replace("#000000", color) if path.exists() else ""
-    renderer = QSvgRenderer(QByteArray(data.encode("utf-8")))
-    image = QPixmap(size, size)
-    image.fill(0)
-    painter = QPainter(image)
-    renderer.render(painter, QRectF(0, 0, size, size))
-    painter.end()
-    return image
-
-
 def icon(name: str, color: str = "#d5deea", size: int = 18) -> QIcon:
-    return QIcon(pixmap(name, color, size))
+    path = ICONS_DIR / f"{name}.svg"
+    if path.exists():
+        loaded = QIcon(str(path))
+        if not loaded.isNull():
+            return loaded
+    pix = QPixmap(size, size)
+    pix.fill(Qt.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setBrush(QColor(color))
+    painter.setPen(Qt.NoPen)
+    painter.drawRoundedRect(2, 2, size - 4, size - 4, 3, 3)
+    painter.end()
+    return QIcon(pix)
 
 
 def page_icon(page_key: str, color: str = "#d5deea") -> QIcon:

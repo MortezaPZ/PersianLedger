@@ -57,13 +57,25 @@ class DocumentListView(BaseView):
             if self.search.text().strip():
                 stmt = stmt.where(Document.description.contains(self.search.text().strip()))
             docs = list(db.execute(stmt.limit(500)).scalars())
-        self.table.setRowCount(len(docs))
-        for r, doc in enumerate(docs):
-            values = [doc.number_display, doc.date_j, DOCUMENT_TYPE_FA.get(doc.doc_type, ""), doc.description, DOCUMENT_STATUS_FA.get(doc.status, ""), str(len(doc.lines))]
+            rows = [
+                (
+                    doc.id,
+                    doc.number_display,
+                    doc.date_j,
+                    DOCUMENT_TYPE_FA.get(doc.doc_type, ""),
+                    doc.description,
+                    DOCUMENT_STATUS_FA.get(doc.status, ""),
+                    str(len(doc.lines)),
+                    doc.status,
+                )
+                for doc in docs
+            ]
+        self.table.setRowCount(len(rows))
+        for r, (doc_id, *values, status) in enumerate(rows):
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
-                item.setData(Qt.UserRole, doc.id)
-                if doc.status == DocumentStatus.DRAFT:
+                item.setData(Qt.UserRole, doc_id)
+                if status == DocumentStatus.DRAFT:
                     item.setBackground(Qt.yellow)
                 self.table.setItem(r, c, item)
         fit_columns(self.table)
