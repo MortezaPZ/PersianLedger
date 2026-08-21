@@ -14,8 +14,8 @@
 - [x] ۶. عضویت چندگروه — مدل `tafsili_group_members` + فیلتر گزارش.
 - [x] ۷. مرور چهارسطحی با breadcrumb — smoke روی `BrowseView`.
 - [x] ۸. سناریوی پروژه A بدون تسعیر — pytest.
-- [ ] ۹. سؤال پشتیبان هنگام خروج — نیاز به کلیک دستی روی exe.
-- [ ] ۱۰. بازیابی بکاپ و clamp پنجره — نیاز به فایل دستی.
+- [x] ۹. سؤال پشتیبان هنگام خروج — `tests/test_close_and_restore.py`.
+- [x] ۱۰. بازیابی بکاپ، اتصال جدید، درخت بدون کش، clamp پنجره — `tests/test_close_and_restore.py`.
 - [x] ۱۱. سوییچ ماندهٔ قبل از بازه — smoke روی `include_opening`.
 
 ## ب) Build و نسخه

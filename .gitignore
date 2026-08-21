@@ -24,3 +24,5 @@ _extracted_strings_fa.txt
 .env
 secrets.*
 config.ini
+*.zip
+PersianLedger-v*-portable.zip
