@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -22,6 +23,7 @@ from app.domain.enums import ACCOUNT_NATURE_FA, ACCOUNT_TYPE_FA, AccountNature, 
 from app.domain.errors import LedgerError
 from app.services import account_service
 from app.ui.views.base_view import BaseView
+from app.ui.widgets import fields
 from app.version import APP_NAME_FA
 
 
@@ -65,6 +67,7 @@ class AccountDialog(QDialog):
         form.addRow(self.t2_req)
         form.addRow("گروه‌های مجاز تفصیلی ۲", self.g2)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        fields.localize_dialog_buttons(buttons)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
@@ -134,7 +137,7 @@ class AccountDialog(QDialog):
 
 class AccountsView(BaseView):
     title = "درخت سرفصل‌ها"
-    hint = "گروه ← کل ← معین. سند فقط روی معین ثبت می‌شود."
+    hint = "گروه ← کل ← معین ← تفصیلی۱ و ۲. دابل‌کلیک یا دکمه ویرایش برای تغییر."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
@@ -147,6 +150,8 @@ class AccountsView(BaseView):
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["کد / عنوان", "نوع", "وضعیت"])
         self.tree.itemDoubleClicked.connect(lambda *_: self.edit())
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._menu)
         # The name column carries the hierarchy and needs the room; otherwise
         # the last column stretches by default and elides the account titles.
         header = self.tree.header()
@@ -164,8 +169,17 @@ class AccountsView(BaseView):
     def reload(self) -> None:
         self.tree.clear()
         with self.ctx.read_session() as db:
+            from sqlalchemy import select
+            from sqlalchemy.orm import selectinload
+            from app.db.models import Tafsili
+
             groups = account_service.account_groups(db)
             accounts = account_service.all_accounts(db, include_inactive=True)
+            tafsilis = list(
+                db.execute(
+                    select(Tafsili).options(selectinload(Tafsili.memberships), selectinload(Tafsili.group))
+                ).scalars()
+            )
         by_parent = {}
         for acc in accounts:
             by_parent.setdefault(acc.parent_id, []).append(acc)
@@ -184,18 +198,44 @@ class AccountsView(BaseView):
                 moin = QTreeWidgetItem([child.display, ACCOUNT_NATURE_FA.get(child.nature, ""), "معین" if child.is_active else "غیرفعال"])
                 moin.setData(0, Qt.UserRole, ("account", child.id))
                 kol.addChild(moin)
-        self.tree.expandAll()
+                by_slot: dict[int, list[int]] = {1: [], 2: []}
+                for rule in child.tafsili_rules:
+                    by_slot.setdefault(rule.slot, []).append(rule.tafsili_group_id)
+                for slot in (1, 2):
+                    gids = set(by_slot.get(slot) or [])
+                    if not gids:
+                        continue
+                    slot_node = QTreeWidgetItem([f"تفصیلی {slot}", "", "خانه سند"])
+                    slot_node.setData(0, Qt.UserRole, ("slot", child.id))
+                    moin.addChild(slot_node)
+                    for item in tafsilis:
+                        if item.group_ids & gids:
+                            leaf = QTreeWidgetItem([item.display, item.group.name if item.group else "", "تفصیلی"])
+                            leaf.setData(0, Qt.UserRole, ("tafsili", item.id))
+                            slot_node.addChild(leaf)
+        self.tree.expandToDepth(2)
 
-    def _current_account(self):
+    def _current_payload(self):
         item = self.tree.currentItem()
         if not item:
-            return None
-        kind, ident = item.data(0, Qt.UserRole) or (None, None)
+            return None, None
+        data = item.data(0, Qt.UserRole) or (None, None)
+        return data[0], data[1] if len(data) > 1 else None
+
+    def _current_account(self):
+        kind, ident = self._current_payload()
         if kind != "account":
             return None
         with self.ctx.read_session() as db:
             from app.db.models import Account
             return db.get(Account, ident)
+
+    def _menu(self, pos) -> None:
+        menu = QMenu(self)
+        menu.addAction("کل جدید", self.add_kol)
+        menu.addAction("معین جدید", self.add_moin)
+        menu.addAction("ویرایش", self.edit)
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def add_kol(self) -> None:
         if AccountDialog(self.ctx, self).exec():
@@ -211,8 +251,25 @@ class AccountsView(BaseView):
             self.ctx.reload_refdata(); self.reload()
 
     def edit(self) -> None:
+        kind, ident = self._current_payload()
+        if kind == "group":
+            self.warn("گروه حساب از نوع دارایی/بدهی است و از همین‌جا ویرایش نمی‌شود. کل یا معین را انتخاب کنید.")
+            return
+        if kind == "slot":
+            self.warn("خانه تفصیلی را از ویرایش معین تنظیم کنید.")
+            return
+        if kind == "tafsili":
+            from app.db.models import Tafsili
+            from app.ui.views.tafsili_view import TafsiliDialog
+            with self.ctx.read_session() as db:
+                item = db.get(Tafsili, ident)
+            if item and TafsiliDialog(self.ctx, self, item=item).exec():
+                self.ctx.reload_refdata()
+                self.reload()
+            return
         acc = self._current_account()
         if not acc:
+            self.warn("یک سرفصل کل یا معین را انتخاب کنید.")
             return
         if AccountDialog(self.ctx, self, account=acc).exec():
             self.ctx.reload_refdata(); self.reload()
