@@ -25,6 +25,7 @@ from app.services import document_service, master_data
 from app.ui.views.base_view import BaseView
 from app.ui.widgets import fields
 from app.ui.widgets.attachment_panel import AttachmentPanel
+from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.jalali_date_edit import JalaliDateEdit
 from app.ui.widgets.line_grid import (
     COL_ACCOUNT,
@@ -61,12 +62,13 @@ class DocumentEntryView(BaseView):
         for item, label in DOCUMENT_TYPE_FA.items():
             if item not in (DocumentType.REVERSAL, DocumentType.CORRECTION):
                 self.type_combo.addItem(label, item)
+        self.type_combo.setToolTip("نوع سند فقط برای دسته‌بندی و گزارش است؛ روی تراز یا شماره اثر ندارد.")
         self.desc_edit = QLineEdit()
         self.year_combo = QComboBox()
         grid.addWidget(fields.labeled("شماره سند", self.number_edit), 0, 0)
         grid.addWidget(fields.labeled("تاریخ", self.date_edit), 0, 1)
-        grid.addWidget(fields.labeled("نوع سند", self.type_combo), 0, 2)
-        grid.addWidget(fields.labeled("سال مالی", self.year_combo), 0, 3)
+        grid.addWidget(fields.labeled("نوع سند", combo_with_picker(self.type_combo, "انتخاب نوع سند")), 0, 2)
+        grid.addWidget(fields.labeled("سال مالی", combo_with_picker(self.year_combo, "انتخاب سال مالی")), 0, 3)
         grid.addWidget(fields.labeled("شرح سند", self.desc_edit), 1, 0, 1, 4)
         for column in range(4):
             grid.setColumnStretch(column, 1)
@@ -247,7 +249,14 @@ class DocumentEntryView(BaseView):
                 ok = False
             parts.append(f"{cur.code}: بد {debit} / بس {credit}")
         self.balance.setText("  |  ".join(parts) or "ردیفی وارد نشده")
-        self.balance.setObjectName("BalanceBar")
+        if not parts:
+            name = "BalanceBar"
+        else:
+            name = "BalanceOk" if ok else "BalanceBad"
+        self.balance.setObjectName(name)
+        style = self.balance.style()
+        style.unpolish(self.balance)
+        style.polish(self.balance)
         self.post_btn.setEnabled(ok and len(self.model.filled_rows()) >= 2 and not self.model.read_only)
 
     def _new_tafsili(self, row: int, slot: int) -> None:
