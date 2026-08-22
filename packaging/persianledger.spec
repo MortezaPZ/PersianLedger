@@ -30,6 +30,7 @@ a = Analysis(
     datas=[
         (str(ROOT / "app" / "ui" / "resources" / "fonts"), "app/ui/resources/fonts"),
         (str(ROOT / "migrations"), "migrations"),
+        (str(ROOT / "docs"), "docs"),
         (str(ROOT / "portable.txt"), "."),
     ],
     hiddenimports=[

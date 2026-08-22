@@ -15,10 +15,16 @@ class AccountNature(str, enum.Enum):
     DEBIT = "DEBIT"
     CREDIT = "CREDIT"
     BOTH = "BOTH"
+    DEBIT_PERIOD = "DEBIT_PERIOD"
+    CREDIT_PERIOD = "CREDIT_PERIOD"
+    DEBIT_CLOSING = "DEBIT_CLOSING"
+    CREDIT_CLOSING = "CREDIT_CLOSING"
 
 
 class DocumentType(str, enum.Enum):
     OPENING = "OPENING"
+    CLOSING = "CLOSING"
+    CLOSE_BOOKS = "CLOSE_BOOKS"
     EXPENSE = "EXPENSE"
     INCOME = "INCOME"
     PARTY = "PARTY"
@@ -56,11 +62,44 @@ ACCOUNT_TYPE_FA = {
 ACCOUNT_NATURE_FA = {
     AccountNature.DEBIT: "بدهکار",
     AccountNature.CREDIT: "بستانکار",
-    AccountNature.BOTH: "بدهکار/بستانکار",
+    AccountNature.BOTH: "مهم نیست",
+    AccountNature.DEBIT_PERIOD: "بدهکار طی دوره",
+    AccountNature.CREDIT_PERIOD: "بستانکار طی دوره",
+    AccountNature.DEBIT_CLOSING: "بدهکار پایان دوره",
+    AccountNature.CREDIT_CLOSING: "بستانکار پایان دوره",
 }
+
+NATURE_CHOICES = (
+    AccountNature.DEBIT_PERIOD,
+    AccountNature.CREDIT_PERIOD,
+    AccountNature.DEBIT_CLOSING,
+    AccountNature.CREDIT_CLOSING,
+    AccountNature.BOTH,
+)
+
+PERIOD_NATURES = {
+    AccountNature.DEBIT_PERIOD,
+    AccountNature.CREDIT_PERIOD,
+}
+
+
+def normalize_nature(value: AccountNature) -> AccountNature:
+    if value == AccountNature.DEBIT:
+        return AccountNature.DEBIT_PERIOD
+    if value == AccountNature.CREDIT:
+        return AccountNature.CREDIT_PERIOD
+    return value
+
+
+def nature_carries_opening(value: AccountNature | None) -> bool:
+    if value is None:
+        return True
+    return normalize_nature(value) not in PERIOD_NATURES
 
 DOCUMENT_TYPE_FA = {
     DocumentType.OPENING: "افتتاحیه",
+    DocumentType.CLOSING: "اختتامیه",
+    DocumentType.CLOSE_BOOKS: "بستن حساب‌ها",
     DocumentType.EXPENSE: "هزینه",
     DocumentType.INCOME: "درآمد",
     DocumentType.PARTY: "حساب اشخاص",

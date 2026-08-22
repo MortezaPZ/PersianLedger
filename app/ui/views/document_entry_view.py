@@ -109,7 +109,7 @@ class DocumentEntryView(BaseView):
         self.new_btn = QPushButton("سند جدید")
         self.save_btn.clicked.connect(self.save_draft)
         self.post_btn.clicked.connect(self.post)
-        self.new_btn.clicked.connect(self.clear)
+        self.new_btn.clicked.connect(self.new_document)
         buttons.addWidget(self.new_btn)
         buttons.addWidget(self.save_btn)
         buttons.addWidget(self.post_btn)
@@ -174,6 +174,7 @@ class DocumentEntryView(BaseView):
                 current = db.merge(self.document) if self.document and self.document.id else None
                 self.document = document_service.save_draft(db, data, current, self.ctx.user_id)
                 db.refresh(self.document)
+                list(self.document.attachments)
             self.number_edit.setText(str(self.document.number))
             self.attachments.set_document(self.document)
             self.inform(f"پیش‌نویس شماره {self.document.number} ذخیره شد.")
@@ -190,6 +191,7 @@ class DocumentEntryView(BaseView):
                 current = db.merge(self.document) if self.document and self.document.id else None
                 self.document = document_service.save_and_post(db, data, current, self.ctx.user_id)
                 master_data.lock_used_currencies(db)
+                list(self.document.attachments)
             self.number_edit.setText(str(self.document.number))
             self.model.read_only = True
             self.attachments.set_document(self.document)
@@ -201,7 +203,38 @@ class DocumentEntryView(BaseView):
         except Exception as exc:
             self.report_error(exc)
 
+    def _abandon_open_draft(self) -> bool:
+        doc = self.document
+        if doc is None or not getattr(doc, "id", None):
+            return True
+        if getattr(doc, "is_posted", False):
+            return True
+        number = doc.number
+        if not self.confirm(
+            f"پیش‌نویس شماره {number} هنوز قطعی نشده. با ادامه، حذف می‌شود و شماره آزاد می‌گردد."
+        ):
+            return False
+        try:
+            with self.ctx.session() as db:
+                current = document_service.load(db, doc.id)
+                if current and not current.is_posted:
+                    document_service.delete_draft(db, current, self.ctx.user_id)
+            self.ctx.dataChanged.emit()
+        except LedgerError as exc:
+            self.warn(str(exc))
+            return False
+        return True
+
+    def new_document(self) -> None:
+        if not self._abandon_open_draft():
+            return
+        self.clear()
+
     def load_document(self, document_id: int) -> None:
+        if self.document and self.document.id and self.document.id != document_id:
+            if not self._abandon_open_draft():
+                return
+            self.document = None
         with self.ctx.read_session() as db:
             doc = document_service.load(db, document_id)
             self.document = doc

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Account, AccountGroup, Currency, Document, DocumentLine, Tafsili
 from app.domain import money
-from app.domain.enums import DOCUMENT_TYPE_FA, DocumentStatus
+from app.domain.enums import DOCUMENT_TYPE_FA, DocumentStatus, nature_carries_opening
 from app.services.report_service import CurrencyColumn, StatementFilter, StatementResult, _apply_scope, account_statement
 
 ZERO = Decimal(0)
@@ -167,13 +167,15 @@ def trial_balance(session: Session, flt: StatementFilter, level: str = LEVEL_MOI
     )
     currencies = _currencies_from_maps(session, [opening, turnover], flt)
     names = _names_for_level(session, level)
+    opening_ok = _opening_allowed_by_key(session, level)
     keys = {k for k, _c in opening} | {k for k, _c in turnover}
     rows: list[TrialBalanceRow] = []
     for key in sorted(keys, key=lambda k: names.get(k, ("", ""))[0]):
         code, name = names.get(key, (str(key), "بدون تفصیلی" if key == NO_TAFSILI else str(key)))
         row = TrialBalanceRow(kind=level, code=code, name=name, key=key)
+        allow_open = opening_ok.get(key, True)
         for col in currencies:
-            od, oc = opening.get((key, col.id), (ZERO, ZERO))
+            od, oc = opening.get((key, col.id), (ZERO, ZERO)) if allow_open else (ZERO, ZERO)
             td, tc = turnover.get((key, col.id), (ZERO, ZERO))
             open_bal = od - oc
             close_bal = open_bal + td - tc
@@ -213,6 +215,31 @@ def _group_column(level: str):
     if level == LEVEL_GROUP:
         return Account.group_id
     return DocumentLine.account_id
+
+
+def _opening_allowed_by_key(session: Session, level: str) -> dict[int, bool]:
+    accounts = list(session.execute(select(Account)).scalars())
+    by_id = {a.id: a for a in accounts}
+    if level == LEVEL_MOIN:
+        return {a.id: nature_carries_opening(a.nature) for a in accounts}
+    if level == LEVEL_KOL:
+        out: dict[int, bool] = {}
+        for a in accounts:
+            if a.level != 1:
+                continue
+            children = [c for c in accounts if c.parent_id == a.id]
+            natures = [c.nature for c in children] or [a.nature]
+            out[a.id] = any(nature_carries_opening(n) for n in natures)
+        return out
+    if level == LEVEL_GROUP:
+        out = {}
+        for a in accounts:
+            gid = a.group_id
+            if gid is None:
+                continue
+            out[gid] = out.get(gid, False) or nature_carries_opening(a.nature)
+        return out
+    return {a.id: nature_carries_opening(a.nature) for a in by_id.values()}
 
 
 def _names_for_level(session: Session, level: str) -> dict[int, tuple[str, str]]:

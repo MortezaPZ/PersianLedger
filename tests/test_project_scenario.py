@@ -9,7 +9,7 @@ from app.db.base import Base
 from app.db.engine import set_session_factory
 from app.db.models import Account, Currency, Document, Tafsili
 from app.db import seed
-from app.domain.enums import DocumentStatus
+from app.domain.enums import AccountNature, DocumentStatus, DocumentType
 from app.services import document_service, ledger_reports, master_data
 from app.services.report_service import StatementFilter, account_statement, party_statement
 
@@ -193,6 +193,77 @@ def test_statement_respects_date_to():
     )
     assert [row.description for row in result.rows] == ["اول بازه"]
     assert result.closing[irr.id] == Decimal("5")
+
+
+def test_browse_hides_opening_docs_when_excluded():
+    session = _session()
+    seed.seed_base(session)
+    seed.seed_demo(session)
+    hidden = ledger_reports.browse_accounts(
+        session,
+        StatementFilter(
+            include_drafts=False,
+            include_opening=False,
+            exclude_doc_types=[DocumentType.OPENING, DocumentType.CLOSING, DocumentType.CLOSE_BOOKS],
+        ),
+        ledger_reports.LEVEL_MOIN,
+    )
+    shown = ledger_reports.browse_accounts(
+        session,
+        StatementFilter(include_drafts=False, include_opening=False, exclude_doc_types=None),
+        ledger_reports.LEVEL_MOIN,
+    )
+    cash_hidden = next(r for r in hidden.rows if r.code == "1001")
+    cash_shown = next(r for r in shown.rows if r.code == "1001")
+    assert sum(cash_shown.turnover_debit.values()) > sum(cash_hidden.turnover_debit.values())
+
+
+def test_period_nature_clears_opening_in_trial():
+    from app.domain import jalali
+
+    session = _session()
+    seed.seed_base(session)
+    seed.seed_demo(session)
+    cash = session.execute(select(Account).where(Account.code == "1001")).scalar_one()
+    cash.nature = AccountNature.DEBIT_PERIOD
+    session.flush()
+    year = master_data.current_fiscal_year(session)
+    start = jalali.gregorian_from_string(f"{year.title}-03-12")
+    both = ledger_reports.trial_balance(
+        session,
+        StatementFilter(date_from=start, include_drafts=False, include_opening=True),
+        level=ledger_reports.LEVEL_MOIN,
+        columns=6,
+    )
+    row = next(r for r in both.rows if r.code == "1001")
+    assert sum(row.opening_debit.values()) == 0
+    assert sum(row.opening_credit.values()) == 0
+
+
+def test_delete_draft_releases_last_number():
+    session = _session()
+    seed.seed_base(session)
+    year = master_data.current_fiscal_year(session)
+    cash = session.execute(select(Account).where(Account.code == "1001")).scalar_one()
+    capital = session.execute(select(Account).where(Account.code == "3001")).scalar_one()
+    irr = session.execute(select(Currency).where(Currency.code == "IRR")).scalar_one()
+    fund = session.execute(select(Tafsili).where(Tafsili.code == "1101")).scalar_one()
+    data = document_service.DocumentInput(
+        fiscal_year_id=year.id,
+        date_g=year.start_date_g,
+        date_j=year.start_date_j,
+        description="پیش‌نویس دورریختنی",
+        lines=[
+            document_service.LineInput(cash.id, irr.id, Decimal("1"), Decimal(0), fund.id, None, ""),
+            document_service.LineInput(capital.id, irr.id, Decimal(0), Decimal("1"), None, None, ""),
+        ],
+    )
+    doc = document_service.save_draft(session, data)
+    number = doc.number
+    session.commit()
+    document_service.delete_draft(session, doc)
+    session.commit()
+    assert document_service.next_number_preview(session, year) == number
 
 
 def test_create_currency_and_fiscal_year():

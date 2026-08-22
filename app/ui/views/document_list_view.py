@@ -12,6 +12,7 @@ from app.services import document_service
 from app.ui import theme
 from app.ui.views.base_view import BaseView
 from app.ui.widgets.jalali_date_edit import JalaliDateEdit
+from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.tables import fit_columns
 from sqlalchemy import select
 
@@ -33,7 +34,7 @@ class DocumentListView(BaseView):
         go = QPushButton("نمایش"); go.setProperty("kind", "primary"); go.clicked.connect(self.reload)
         bar.addWidget(QLabel("از")); bar.addWidget(self.from_date)
         bar.addWidget(QLabel("تا")); bar.addWidget(self.to_date)
-        bar.addWidget(self.status); bar.addWidget(self.search); bar.addWidget(go)
+        bar.addWidget(combo_with_picker(self.status, "وضعیت سند")); bar.addWidget(self.search); bar.addWidget(go)
         self.body.addLayout(bar)
         actions = QHBoxLayout()
         open_btn = QPushButton("باز کردن"); open_btn.clicked.connect(self.open_current)

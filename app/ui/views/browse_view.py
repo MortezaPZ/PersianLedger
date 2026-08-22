@@ -4,6 +4,7 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 from sqlalchemy import select
 
 from app.db.models import Account
+from app.domain.enums import DocumentType
 from app.export import excel, printing
 from app.services import ledger_reports as lr
 from app.services.report_service import StatementFilter
@@ -48,6 +50,16 @@ class BrowseView(ReportView):
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
         self.add_filter("ارزها", self.make_currency_list())
+        special = QWidget()
+        special_row = QHBoxLayout(special)
+        special_row.setContentsMargins(0, 0, 0, 0)
+        self.chk_opening = QCheckBox("افتتاحیه")
+        self.chk_closing = QCheckBox("اختتامیه")
+        self.chk_close_books = QCheckBox("بستن حساب‌ها")
+        for box in (self.chk_opening, self.chk_closing, self.chk_close_books):
+            special_row.addWidget(box)
+        special_row.addStretch()
+        self.add_filter("اسناد خاص", special)
         self.finish_filters()
 
         chrome = QFrame()
@@ -139,6 +151,14 @@ class BrowseView(ReportView):
         if kwargs is None:
             return None
         flt = StatementFilter(**kwargs)
+        exclude = []
+        if not self.chk_opening.isChecked():
+            exclude.append(DocumentType.OPENING)
+        if not self.chk_closing.isChecked():
+            exclude.append(DocumentType.CLOSING)
+        if not self.chk_close_books.isChecked():
+            exclude.append(DocumentType.CLOSE_BOOKS)
+        flt.exclude_doc_types = exclude
         if not self._trail:
             return flt
         ident = self._trail[-1][0]

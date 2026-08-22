@@ -9,7 +9,7 @@ from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Account, Currency, Document, DocumentLine, Tafsili, TafsiliGroupMember
-from app.domain.enums import DOCUMENT_TYPE_FA, DocumentStatus
+from app.domain.enums import DOCUMENT_TYPE_FA, DocumentStatus, DocumentType
 from app.domain import money
 
 ZERO = Decimal(0)
@@ -27,6 +27,7 @@ class StatementFilter:
     group_ids: list[int] | None = None
     include_drafts: bool = True
     include_opening: bool = True
+    exclude_doc_types: list[DocumentType] | None = None
 
 
 @dataclass
@@ -92,6 +93,8 @@ def _apply_scope(stmt: Select, flt: StatementFilter) -> Select:
         stmt = stmt.where(
             or_(DocumentLine.tafsili1_id.in_(members), DocumentLine.tafsili2_id.in_(members))
         )
+    if flt.exclude_doc_types:
+        stmt = stmt.where(Document.doc_type.notin_(flt.exclude_doc_types))
     return stmt
 
 
@@ -203,6 +206,7 @@ def party_statement(session: Session, flt: StatementFilter) -> StatementResult:
         group_ids=flt.group_ids,
         include_drafts=flt.include_drafts,
         include_opening=flt.include_opening,
+        exclude_doc_types=flt.exclude_doc_types,
     )
     result = account_statement(session, cloned)
     result.title = title

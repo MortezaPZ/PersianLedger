@@ -23,6 +23,7 @@ from app.domain.errors import LedgerError
 from app.services import master_data
 from app.ui.views.base_view import BaseView
 from app.ui.widgets import fields
+from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.tables import fit_columns
 from app.version import APP_NAME_FA
 
@@ -54,7 +55,7 @@ class TafsiliDialog(QDialog):
             it.setData(Qt.UserRole, g.id)
             self.extras.addItem(it)
         self.group.setToolTip("گروه اصلی مبنای کد پیشنهادی است. عضویت در گروه‌های دیگر همان رکورد را در چند گزارش نشان می‌دهد.")
-        form.addRow("گروه اصلی", self.group)
+        form.addRow("گروه اصلی", combo_with_picker(self.group, "انتخاب گروه"))
         form.addRow("کد", self.code)
         form.addRow("نام", self.name)
         form.addRow("عضویت در گروه‌های دیگر", self.extras)
@@ -155,7 +156,7 @@ class TafsiliView(BaseView):
         edit = QPushButton("ویرایش")
         edit.clicked.connect(self.edit)
         bar.addWidget(QLabel("گروه"))
-        bar.addWidget(self.filter)
+        bar.addWidget(combo_with_picker(self.filter, "فیلتر گروه"))
         bar.addStretch()
         bar.addWidget(edit)
         bar.addWidget(add)

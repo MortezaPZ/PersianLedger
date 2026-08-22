@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from app.domain import jalali
 from app.domain.jalali import JalaliError
+from app.domain.money import to_persian_digits
 
 
 class JalaliCalendarPopup(QWidget):
@@ -51,7 +52,9 @@ class JalaliCalendarPopup(QWidget):
             self.grid.addWidget(label, 0, col)
         for i in range(42):
             btn = QPushButton()
-            btn.setFixedSize(32, 28)
+            btn.setObjectName("CalendarDay")
+            btn.setFixedSize(36, 32)
+            btn.setStyleSheet("padding: 0; min-width: 36px; min-height: 32px;")
             btn.clicked.connect(self._pick)
             self._buttons.append(btn)
             self.grid.addWidget(btn, 1 + i // 7, i % 7)
@@ -80,7 +83,7 @@ class JalaliCalendarPopup(QWidget):
         for i, btn in enumerate(self._buttons):
             day = i - offset + 1
             if 1 <= day <= dim:
-                btn.setText(str(day))
+                btn.setText(to_persian_digits(str(day)))
                 btn.setEnabled(True)
                 btn.setProperty("day", day)
             else:

@@ -1,2 +1,4 @@
-This file marks a portable (ZIP) layout.
-The app stores data in a `data` folder next to PersianLedger.exe.
+This file switches the application into portable mode.
+While it is present, the database, backups, attachments and logs stay in the
+'data' folder next to PersianLedger.exe instead of C:\ProgramData.
+Delete it only if you want the installed-application behaviour.

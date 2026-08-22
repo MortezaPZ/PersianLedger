@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.db.models import AuditLog
 from app.domain.enums import AUDIT_ACTION_FA
 from app.ui.views.base_view import BaseView
+from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.tables import fit_columns
 
 
@@ -19,7 +20,7 @@ class AuditView(BaseView):
         bar = QHBoxLayout()
         self.entity = QComboBox(); self.entity.addItems(["همه", "Document", "Account", "Tafsili", "Currency", "FiscalYear"])
         self.entity.currentIndexChanged.connect(self.reload)
-        bar.addWidget(QLabel("موضوع")); bar.addWidget(self.entity); bar.addStretch()
+        bar.addWidget(QLabel("موضوع")); bar.addWidget(combo_with_picker(self.entity, "موضوع")); bar.addStretch()
         self.body.addLayout(bar)
         split = QHBoxLayout()
         self.table = QTableWidget(0, 5)

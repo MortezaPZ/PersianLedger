@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
 )
 
-from app.domain.enums import ACCOUNT_NATURE_FA, ACCOUNT_TYPE_FA, AccountNature, AccountType
+from app.domain.enums import ACCOUNT_NATURE_FA, ACCOUNT_TYPE_FA, NATURE_CHOICES, AccountType, normalize_nature
 from app.domain.errors import LedgerError
 from app.services import account_service
 from app.ui.views.base_view import BaseView
@@ -39,8 +39,8 @@ class AccountDialog(QDialog):
         self.code = QLineEdit()
         self.name = QLineEdit()
         self.nature = QComboBox()
-        for item, label in ACCOUNT_NATURE_FA.items():
-            self.nature.addItem(label, item)
+        for item in NATURE_CHOICES:
+            self.nature.addItem(ACCOUNT_NATURE_FA[item], item)
         self.t1_req = QCheckBox("تفصیلی ۱ الزامی است")
         self.t2_req = QCheckBox("تفصیلی ۲ الزامی است")
         self.g1 = QListWidget(); self.g2 = QListWidget()
@@ -74,7 +74,7 @@ class AccountDialog(QDialog):
         if account:
             self.code.setText(account.code)
             self.name.setText(account.name)
-            idx = self.nature.findData(account.nature)
+            idx = self.nature.findData(normalize_nature(account.nature))
             if idx >= 0:
                 self.nature.setCurrentIndex(idx)
             self.t1_req.setChecked(account.tafsili1_required)
@@ -195,7 +195,7 @@ class AccountsView(BaseView):
             kol.setData(0, Qt.UserRole, ("account", acc.id))
             parent_node.addChild(kol)
             for child in by_parent.get(acc.id, []):
-                moin = QTreeWidgetItem([child.display, ACCOUNT_NATURE_FA.get(child.nature, ""), "معین" if child.is_active else "غیرفعال"])
+                moin = QTreeWidgetItem([child.display, ACCOUNT_NATURE_FA.get(normalize_nature(child.nature), ""), "معین" if child.is_active else "غیرفعال"])
                 moin.setData(0, Qt.UserRole, ("account", child.id))
                 kol.addChild(moin)
                 by_slot: dict[int, list[int]] = {1: [], 2: []}

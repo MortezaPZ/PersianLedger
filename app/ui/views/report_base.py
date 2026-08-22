@@ -74,7 +74,9 @@ class ReportView(BaseView):
 
     def finish_filters(self) -> None:
         """Place the shared options after the view's own filters."""
-        self.add_filter("اسناد", self.make_drafts_combo())
+        from app.ui.widgets.pickers import combo_with_picker
+
+        self.add_filter("اسناد", combo_with_picker(self.make_drafts_combo(), "نوع اسناد"))
         self.add_filter("", self.include_opening)
 
     def make_date_range(self) -> tuple[JalaliDateEdit, JalaliDateEdit]:
