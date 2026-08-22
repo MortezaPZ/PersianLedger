@@ -82,8 +82,9 @@ class TrialBalanceView(ReportView):
         self.columns.setCurrentIndex(1)
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
-        self.add_filter("سطح", self.level)
-        self.add_filter("ستون‌ها", self.columns)
+        from app.ui.widgets.pickers import combo_with_picker
+        self.add_filter("سطح", combo_with_picker(self.level, "سطح تراز"))
+        self.add_filter("ستون‌ها", combo_with_picker(self.columns, "تعداد ستون"))
         self.add_filter("ارزها", self.make_currency_list())
         self.add_filter("گروه تفصیلی", self.make_group_list())
         self.finish_filters()
@@ -101,11 +102,14 @@ class TrialBalanceView(ReportView):
         self.reload_groups()
 
     def run(self) -> None:
+        kwargs = self.ready_filters()
+        if kwargs is None:
+            return
         try:
             with self.ctx.read_session() as db:
                 self._result = lr.trial_balance(
                     db,
-                    StatementFilter(**self.base_filter_kwargs()),
+                    StatementFilter(**kwargs),
                     level=self.level.currentData(),
                     columns=self.columns.currentData(),
                 )

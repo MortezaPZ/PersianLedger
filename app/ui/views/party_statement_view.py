@@ -6,12 +6,13 @@ from app.export import excel, printing
 from app.services.report_service import StatementFilter, party_statement
 from app.ui.views.report_base import ReportView
 from app.ui.views.statement_view import StatementModel
+from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.tables import fit_columns
 
 
 class PartyStatementView(ReportView):
     title = "صورت وضعیت اشخاص"
-    hint = "همه گردش یک تفصیلی در تمام سرفصل‌ها — مناسب گزارش پروژه"
+    hint = "مانده یک شخص یا پروژه در همه سرفصل‌ها. برای گردش یک سرفصل از «صورتحساب سرفصل» استفاده کنید."
     file_stem = "صورت-وضعیت"
 
     def __init__(self, context, parent=None) -> None:
@@ -20,8 +21,9 @@ class PartyStatementView(ReportView):
         self.group = QComboBox()
         self.party = QComboBox(); self.party.setEditable(True)
         self.group.currentIndexChanged.connect(self._fill_parties)
-        self.add_filter("گروه", self.group)
-        self.add_filter("شخص / پروژه", self.party)
+        self.group.setToolTip("یک گروه، یا همه گروه‌ها. تفصیلی مشترک در چند گروه با انتخاب گروه محدود می‌شود.")
+        self.add_filter("گروه", combo_with_picker(self.group, "انتخاب گروه"))
+        self.add_filter("شخص / پروژه", combo_with_picker(self.party, "انتخاب تفصیلی"))
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
         self.add_filter("ارزها", self.make_currency_list())
@@ -54,7 +56,9 @@ class PartyStatementView(ReportView):
             self.warn("تفصیلی را انتخاب کنید.")
             return
         groups = [self.group.currentData()] if self.group.currentData() else None
-        kwargs = self.base_filter_kwargs()
+        kwargs = self.ready_filters()
+        if kwargs is None:
+            return
         if groups:
             kwargs["group_ids"] = groups
         try:

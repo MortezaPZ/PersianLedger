@@ -9,6 +9,7 @@ from app.export import excel, printing
 from app.services.report_service import StatementFilter, account_statement
 from app.ui import theme
 from app.ui.views.report_base import ReportView
+from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.tables import fit_columns
 
 
@@ -64,7 +65,7 @@ class StatementModel(QAbstractTableModel):
 
 class StatementView(ReportView):
     title = "صورتحساب سرفصل"
-    hint = "کاردکس چندارزی همراه مانده تجمعی و شرح هر ردیف"
+    hint = "گردش یک سرفصل. برای مانده یک شخص در همه سرفصل‌ها از «صورت وضعیت اشخاص» استفاده کنید."
     file_stem = "صورتحساب-سرفصل"
 
     def __init__(self, context, parent=None) -> None:
@@ -72,8 +73,8 @@ class StatementView(ReportView):
         self.from_date, self.to_date = self.make_date_range()
         self.account = QComboBox(); self.account.setEditable(True)
         self.tafsili = QComboBox(); self.tafsili.setEditable(True)
-        self.add_filter("سرفصل", self.account)
-        self.add_filter("تفصیلی", self.tafsili)
+        self.add_filter("سرفصل", combo_with_picker(self.account, "انتخاب سرفصل"))
+        self.add_filter("تفصیلی", combo_with_picker(self.tafsili, "انتخاب تفصیلی"))
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
         self.add_filter("ارزها", self.make_currency_list())
@@ -102,11 +103,14 @@ class StatementView(ReportView):
         if not self.account.currentData():
             self.warn("سرفصل را انتخاب کنید.")
             return
+        kwargs = self.ready_filters()
+        if kwargs is None:
+            return
         try:
             with self.ctx.read_session() as db:
                 self._result = account_statement(
                     db,
-                    StatementFilter(account_id=self.account.currentData(), tafsili_any_id=self.tafsili.currentData(), **self.base_filter_kwargs()),
+                    StatementFilter(account_id=self.account.currentData(), tafsili_any_id=self.tafsili.currentData(), **kwargs),
                 )
             self.model.set_result(self._result)
             fit_columns(self.table)

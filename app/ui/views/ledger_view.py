@@ -22,7 +22,8 @@ class LedgerView(ReportView):
         self.kind = QComboBox(); self.kind.addItem("دفتر معین", False); self.kind.addItem("دفتر کل", True)
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
-        self.add_filter("سطح دفتر", self.kind)
+        from app.ui.widgets.pickers import combo_with_picker
+        self.add_filter("سطح دفتر", combo_with_picker(self.kind, "سطح دفتر"))
         self.finish_filters()
         split = QHBoxLayout()
         self.accounts = QListWidget()
@@ -35,9 +36,12 @@ class LedgerView(ReportView):
         self.body.addLayout(split, 1)
 
     def run(self) -> None:
+        kwargs = self.ready_filters()
+        if kwargs is None:
+            return
         try:
             with self.ctx.read_session() as db:
-                self._result = lr.general_ledger(db, StatementFilter(**self.base_filter_kwargs()), kol=bool(self.kind.currentData()))
+                self._result = lr.general_ledger(db, StatementFilter(**kwargs), kol=bool(self.kind.currentData()))
             self.accounts.clear()
             for section in self._result.sections:
                 self.accounts.addItem(f"{section.code} {section.name}")

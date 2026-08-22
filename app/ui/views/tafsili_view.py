@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from app.domain.errors import LedgerError
 from app.services import master_data
 from app.ui.views.base_view import BaseView
+from app.ui.widgets import fields
 from app.ui.widgets.tables import fit_columns
 from app.version import APP_NAME_FA
 
@@ -52,6 +53,7 @@ class TafsiliDialog(QDialog):
             it.setCheckState(Qt.Unchecked)
             it.setData(Qt.UserRole, g.id)
             self.extras.addItem(it)
+        self.group.setToolTip("گروه اصلی مبنای کد پیشنهادی است. عضویت در گروه‌های دیگر همان رکورد را در چند گزارش نشان می‌دهد.")
         form.addRow("گروه اصلی", self.group)
         form.addRow("کد", self.code)
         form.addRow("نام", self.name)
@@ -61,6 +63,7 @@ class TafsiliDialog(QDialog):
         form.addRow("نشانی", self.address)
         form.addRow("یادداشت", self.note)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        fields.localize_dialog_buttons(buttons)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
