@@ -6,7 +6,7 @@ their neighbours are.
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialogButtonBox, QLabel, QVBoxLayout, QWidget
 
 
 def labeled(label: str, widget: QWidget) -> QWidget:
@@ -26,3 +26,12 @@ def labeled(label: str, widget: QWidget) -> QWidget:
     column.addWidget(widget)
     column.addStretch()
     return group
+
+
+def localize_dialog_buttons(box: QDialogButtonBox) -> None:
+    save = box.button(QDialogButtonBox.Save)
+    cancel = box.button(QDialogButtonBox.Cancel)
+    if save:
+        save.setText("ذخیره")
+    if cancel:
+        cancel.setText("بی‌خیال")

@@ -8,11 +8,16 @@ from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -25,8 +30,104 @@ from app.domain.errors import LedgerError
 from app.services import backup_service, master_data
 from app.ui import theme
 from app.ui.views.base_view import BaseView
+from app.ui.widgets import fields
 from app.ui.widgets.tables import fit_columns, size_to_rows
 from app.version import APP_NAME_FA, APP_VERSION
+
+
+class CurrencyDialog(QDialog):
+    def __init__(self, context, parent=None, currency=None) -> None:
+        super().__init__(parent)
+        self.ctx = context
+        self.currency = currency
+        self.setWindowTitle("ویرایش ارز" if currency else "ارز جدید")
+        self.setLayoutDirection(Qt.RightToLeft)
+        form = QFormLayout(self)
+        self.code = QLineEdit()
+        self.name = QLineEdit()
+        self.symbol = QLineEdit()
+        self.decimals = QSpinBox()
+        self.decimals.setRange(0, 4)
+        self.active = QCheckBox("فعال")
+        self.active.setChecked(True)
+        form.addRow("کد", self.code)
+        form.addRow("نام", self.name)
+        form.addRow("نماد", self.symbol)
+        form.addRow("اعشار", self.decimals)
+        if currency:
+            form.addRow(self.active)
+            self.code.setText(currency.code)
+            self.code.setReadOnly(True)
+            self.name.setText(currency.name)
+            self.symbol.setText(currency.symbol)
+            self.decimals.setValue(currency.decimals)
+            self.active.setChecked(currency.is_active)
+            if currency.is_locked:
+                self.decimals.setEnabled(False)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        fields.localize_dialog_buttons(buttons)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def accept(self) -> None:
+        try:
+            with self.ctx.session() as db:
+                if self.currency is None:
+                    master_data.create_currency(
+                        db,
+                        code=self.code.text(),
+                        name=self.name.text(),
+                        symbol=self.symbol.text(),
+                        decimals=self.decimals.value(),
+                        user_id=self.ctx.user_id,
+                    )
+                else:
+                    row = db.merge(self.currency)
+                    master_data.update_currency(
+                        db,
+                        row,
+                        name=self.name.text(),
+                        symbol=self.symbol.text(),
+                        decimals=self.decimals.value(),
+                        is_active=self.active.isChecked(),
+                        user_id=self.ctx.user_id,
+                    )
+            super().accept()
+        except LedgerError as exc:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, APP_NAME_FA, str(exc))
+
+
+class FiscalYearDialog(QDialog):
+    def __init__(self, context, parent=None) -> None:
+        super().__init__(parent)
+        self.ctx = context
+        self.setWindowTitle("سال مالی جدید")
+        self.setLayoutDirection(Qt.RightToLeft)
+        form = QFormLayout(self)
+        self.year = QSpinBox()
+        self.year.setRange(1300, 1600)
+        from app.domain import jalali
+        self.year.setValue(jalali.today_jalali().year)
+        form.addRow("سال شمسی", self.year)
+        hint = QLabel("بازه از ۱ فروردین تا پایان اسفند همان سال ساخته می‌شود.")
+        hint.setWordWrap(True)
+        form.addRow(hint)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        fields.localize_dialog_buttons(buttons)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def accept(self) -> None:
+        try:
+            with self.ctx.session() as db:
+                master_data.create_fiscal_year(db, self.year.value(), user_id=self.ctx.user_id)
+            super().accept()
+        except LedgerError as exc:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, APP_NAME_FA, str(exc))
 
 
 class SettingsView(BaseView):
@@ -48,9 +149,26 @@ class SettingsView(BaseView):
         currencies_title.setObjectName("SectionTitle")
         years_title = QLabel("سال مالی")
         years_title.setObjectName("SectionTitle")
+        cur_bar = QHBoxLayout()
+        add_cur = QPushButton("افزودن ارز")
+        add_cur.setProperty("kind", "primary")
+        edit_cur = QPushButton("ویرایش ارز")
+        add_cur.clicked.connect(self.add_currency)
+        edit_cur.clicked.connect(self.edit_currency)
+        cur_bar.addWidget(add_cur)
+        cur_bar.addWidget(edit_cur)
+        cur_bar.addStretch()
+        year_bar = QHBoxLayout()
+        add_year = QPushButton("سال مالی جدید")
+        add_year.setProperty("kind", "primary")
+        add_year.clicked.connect(self.add_fiscal_year)
+        year_bar.addWidget(add_year)
+        year_bar.addStretch()
         self.body.addWidget(currencies_title)
+        self.body.addLayout(cur_bar)
         self.body.addWidget(self.currency_table)
         self.body.addWidget(years_title)
+        self.body.addLayout(year_bar)
         self.body.addWidget(self.year_table)
         appearance = QGroupBox("ظاهر")
         appear_layout = QVBoxLayout(appearance)
@@ -83,6 +201,9 @@ class SettingsView(BaseView):
         self.backup_table.setHorizontalHeaderLabels(["فایل", "حجم", "تاریخ"])
         layout.addWidget(self.backup_table)
         self.body.addWidget(box)
+        help_btn = QPushButton("پاسخ پرسش‌های راهنما")
+        help_btn.clicked.connect(self.open_answers)
+        self.body.addWidget(help_btn)
         self.about_label = QLabel()
         self.body.addWidget(self.about_label)
         self.reload()
@@ -111,7 +232,10 @@ class SettingsView(BaseView):
         self.currency_table.setRowCount(len(currencies))
         for r, c in enumerate(currencies):
             for col, value in enumerate((c.code, c.name, c.symbol, str(c.decimals), "فعال" if c.is_active else "غیرفعال")):
-                self.currency_table.setItem(r, col, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                if col == 0:
+                    item.setData(Qt.UserRole, c.id)
+                self.currency_table.setItem(r, col, item)
         self.year_table.setRowCount(len(years))
         for r, y in enumerate(years):
             for col, value in enumerate((y.title, y.start_date_j, y.end_date_j, "بسته" if y.is_closed else "باز")):
@@ -130,6 +254,50 @@ class SettingsView(BaseView):
         self.about_label.setText(
             f"{APP_NAME_FA} {APP_VERSION}  |  {self.ctx.config.describe()}  |  ساختار: {rev or '—'}"
         )
+
+    def _selected_currency(self):
+        row = self.currency_table.currentRow()
+        if row < 0:
+            return None
+        item = self.currency_table.item(row, 0)
+        cid = item.data(Qt.UserRole) if item else None
+        if cid is None:
+            return None
+        with self.ctx.read_session() as db:
+            from app.db.models import Currency
+            return db.get(Currency, cid)
+
+    def add_currency(self) -> None:
+        if CurrencyDialog(self.ctx, self).exec():
+            self.ctx.reload_refdata()
+            self.reload()
+
+    def edit_currency(self) -> None:
+        currency = self._selected_currency()
+        if not currency:
+            self.warn("یک ارز را از جدول انتخاب کنید.")
+            return
+        if CurrencyDialog(self.ctx, self, currency=currency).exec():
+            self.ctx.reload_refdata()
+            self.reload()
+
+    def add_fiscal_year(self) -> None:
+        if FiscalYearDialog(self.ctx, self).exec():
+            self.ctx.reload_refdata()
+            self.reload()
+
+    def open_answers(self) -> None:
+        from app import paths
+
+        path = paths.project_root() / "docs" / "answers-fa.md"
+        if paths.is_frozen():
+            frozen = paths.resource_dir() / "docs" / "answers-fa.md"
+            if frozen.exists():
+                path = frozen
+        if path.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        else:
+            self.warn("فایل راهنما پیدا نشد.")
 
     def backup_quick(self) -> None:
         try:
