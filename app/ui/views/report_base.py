@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -79,9 +80,37 @@ class ReportView(BaseView):
     def make_date_range(self) -> tuple[JalaliDateEdit, JalaliDateEdit]:
         self.from_date = JalaliDateEdit()
         self.to_date = JalaliDateEdit()
-        self.from_date.clear()
-        self.to_date.clear()
+        self.apply_fiscal_year_dates()
         return self.from_date, self.to_date
+
+    def apply_fiscal_year_dates(self) -> None:
+        years = self.ctx.fiscal_years()
+        year = next((y for y in years if y.id == self.ctx.fiscal_year_id), years[0] if years else None)
+        if not year:
+            self.from_date.clear()
+            self.to_date.clear()
+            return
+        self.from_date.setText(year.start_date_j)
+        self.to_date.setText(year.end_date_j)
+
+    def date_range_error(self) -> str | None:
+        if not hasattr(self, "from_date"):
+            return None
+        if self.from_date.text() and self.from_date.gregorian() is None:
+            return "تاریخ شروع نامعتبر است."
+        if self.to_date.text() and self.to_date.gregorian() is None:
+            return "تاریخ پایان نامعتبر است."
+        start, end = self.from_date.gregorian(), self.to_date.gregorian()
+        if start and end and start > end:
+            return "تاریخ شروع از تاریخ پایان بزرگ‌تر است."
+        return None
+
+    def ready_filters(self) -> dict | None:
+        err = self.date_range_error()
+        if err:
+            self.warn(err)
+            return None
+        return self.base_filter_kwargs()
 
     @staticmethod
     def _checkable_list(hint_text: str) -> tuple[QWidget, QListWidget]:
@@ -97,7 +126,23 @@ class ReportView(BaseView):
         hint = QLabel(hint_text)
         hint.setObjectName("Hint")  # themed, so it stays legible in dark mode
         hint.setWordWrap(True)
+        shortcuts = QHBoxLayout()
+        all_btn = QPushButton("همه")
+        none_btn = QPushButton("هیچ")
+        all_btn.setProperty("kind", "ghost")
+        none_btn.setProperty("kind", "ghost")
+
+        def _set(state) -> None:
+            for i in range(listing.count()):
+                listing.item(i).setCheckState(state)
+
+        all_btn.clicked.connect(lambda: _set(Qt.Checked))
+        none_btn.clicked.connect(lambda: _set(Qt.Unchecked))
+        shortcuts.addWidget(all_btn)
+        shortcuts.addWidget(none_btn)
+        shortcuts.addStretch()
         layout.addWidget(listing)
+        layout.addLayout(shortcuts)
         layout.addWidget(hint)
         return box, listing
 

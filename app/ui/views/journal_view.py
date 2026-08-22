@@ -87,8 +87,11 @@ class JournalView(ReportView):
 
     def run(self) -> None:
         try:
+            kwargs = self.ready_filters()
+            if kwargs is None:
+                return
             with self.ctx.read_session() as db:
-                self._result = lr.journal(db, StatementFilter(**self.base_filter_kwargs()))
+                self._result = lr.journal(db, StatementFilter(**kwargs))
             self.model.set_result(self._result)
             fit_columns(self.table)
             self.summary.setText(f"{len(self._result.rows)} سطر")

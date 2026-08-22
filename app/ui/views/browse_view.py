@@ -134,8 +134,10 @@ class BrowseView(ReportView):
         self.reload_currencies()
         self.run()
 
-    def _filter(self) -> StatementFilter:
-        kwargs = self.base_filter_kwargs()
+    def _filter(self) -> StatementFilter | None:
+        kwargs = self.ready_filters()
+        if kwargs is None:
+            return None
         flt = StatementFilter(**kwargs)
         if not self._trail:
             return flt
@@ -176,9 +178,12 @@ class BrowseView(ReportView):
         self.run()
 
     def run(self) -> None:
+        flt = self._filter()
+        if flt is None:
+            return
         try:
             with self.ctx.read_session() as db:
-                self._result = lr.browse_accounts(db, self._filter(), self._level)
+                self._result = lr.browse_accounts(db, flt, self._level)
             self.model.set_result(self._result)
             fit_columns(self.table)
             for position, (level, btn) in enumerate(self.level_buttons):
