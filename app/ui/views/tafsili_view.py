@@ -33,6 +33,7 @@ class TafsiliDialog(QDialog):
         super().__init__(parent)
         self.ctx = context
         self.item = item
+        self.created_id: int | None = None
         self.setWindowTitle("تفصیلی شناور")
         self.setLayoutDirection(Qt.RightToLeft)
         form = QFormLayout(self)
@@ -40,6 +41,7 @@ class TafsiliDialog(QDialog):
         for g in context.refdata.groups:
             self.group.addItem(f"{g.code} {g.name}", g.id)
         self.group.currentIndexChanged.connect(self._suggest)
+        self.group.currentIndexChanged.connect(self._sync_home_row)
         self.code = QLineEdit()
         self.name = QLineEdit()
         self.phone = QLineEdit()
@@ -55,10 +57,16 @@ class TafsiliDialog(QDialog):
             it.setData(Qt.UserRole, g.id)
             self.extras.addItem(it)
         self.group.setToolTip("گروه اصلی مبنای کد پیشنهادی است. عضویت در گروه‌های دیگر همان رکورد را در چند گزارش نشان می‌دهد.")
+        self.extras.setToolTip("گروه اصلی همیشه یکی از گروه‌های عضویت است؛ ردیف آن اینجا به‌صورت انتخاب‌شده و غیرفعال نشان داده می‌شود.")
+        self.linked_meoin = QLabel("—")
+        self.linked_meoin.setWordWrap(True)
+        self.group.currentIndexChanged.connect(self._sync_linked_meoin)
+        self.extras.itemChanged.connect(self._sync_linked_meoin)
         form.addRow("گروه اصلی", combo_with_picker(self.group, "انتخاب گروه"))
         form.addRow("کد", self.code)
         form.addRow("نام", self.name)
         form.addRow("عضویت در گروه‌های دیگر", self.extras)
+        form.addRow("سرفصل‌های معین متصل", self.linked_meoin)
         form.addRow("تلفن", self.phone)
         form.addRow("شناسه ملی", self.nid)
         form.addRow("نشانی", self.address)
@@ -84,6 +92,30 @@ class TafsiliDialog(QDialog):
                 it.setCheckState(Qt.Checked if gid in item.group_ids and gid != item.group_id else Qt.Unchecked)
         else:
             self._suggest()
+        self._sync_home_row()
+        self._sync_linked_meoin()
+
+    def _sync_home_row(self) -> None:
+        home = self.group.currentData()
+        for i in range(self.extras.count()):
+            it = self.extras.item(i)
+            is_home = it.data(Qt.UserRole) == home
+            flags = it.flags()
+            if is_home:
+                it.setCheckState(Qt.Checked)
+                it.setFlags(flags & ~Qt.ItemIsEnabled)
+            else:
+                it.setFlags(flags | Qt.ItemIsEnabled)
+
+    def _sync_linked_meoin(self) -> None:
+        group_ids = {self.group.currentData()} if self.group.currentData() else set()
+        for i in range(self.extras.count()):
+            it = self.extras.item(i)
+            if it.checkState() == Qt.Checked:
+                group_ids.add(it.data(Qt.UserRole))
+        accounts = self.ctx.refdata.moein_accounts_for_groups(group_ids)
+        names = sorted({f"{a.code} {a.name}" for a in accounts if a.is_postable})
+        self.linked_meoin.setText("، ".join(names) if names else "هیچ سرفصل معینی هنوز این گروه(ها) را نمی‌پذیرد.")
 
     def _suggest(self) -> None:
         if self.item:
@@ -107,7 +139,7 @@ class TafsiliDialog(QDialog):
         try:
             with self.ctx.session() as db:
                 if self.item is None:
-                    master_data.create_tafsili(
+                    row = master_data.create_tafsili(
                         db,
                         code=self.code.text(),
                         name=self.name.text(),
@@ -119,6 +151,8 @@ class TafsiliDialog(QDialog):
                         extra_group_ids=self.extra_ids(),
                         user_id=self.ctx.user_id,
                     )
+                    db.flush()
+                    self.created_id = row.id
                 else:
                     item = db.merge(self.item)
                     master_data.update_tafsili(
@@ -161,8 +195,8 @@ class TafsiliView(BaseView):
         bar.addWidget(edit)
         bar.addWidget(add)
         self.body.addLayout(bar)
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["کد", "نام", "گروه اصلی", "گروه‌های دیگر", "وضعیت"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["کد", "نام", "گروه اصلی", "گروه‌های دیگر", "معین‌های متصل", "وضعیت"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.doubleClicked.connect(self.edit)
@@ -191,10 +225,12 @@ class TafsiliView(BaseView):
             for item in rows:
                 extras = [groups[i].name for i in item.group_ids if i != item.group_id and i in groups]
                 home = groups[item.group_id].name if item.group_id in groups else ""
+                meoin = self.ctx.refdata.moein_accounts_for_groups(item.group_ids)
+                meoin_names = "، ".join(sorted({a.code for a in meoin if a.is_postable}))
                 payload.append(
                     (
                         item.id,
-                        [item.code, item.name, home, "، ".join(extras), "فعال" if item.is_active else "غیرفعال"],
+                        [item.code, item.name, home, "، ".join(extras), meoin_names, "فعال" if item.is_active else "غیرفعال"],
                     )
                 )
         self.table.setRowCount(len(payload))

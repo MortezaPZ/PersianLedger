@@ -1,29 +1,27 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QAbstractItemView, QComboBox, QLabel, QTableView
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QAbstractItemView, QListWidgetItem, QTableView
 
 from app.export import excel, printing
 from app.services.report_service import StatementFilter, party_statement
 from app.ui.views.report_base import ReportView
 from app.ui.views.statement_view import StatementModel
-from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.tables import fit_columns
 
 
 class PartyStatementView(ReportView):
     title = "صورت وضعیت اشخاص"
-    hint = "مانده یک شخص یا پروژه در همه سرفصل‌ها. برای گردش یک سرفصل از «صورتحساب سرفصل» استفاده کنید."
+    hint = "مانده یک یا چند شخص/پروژه در همه سرفصل‌ها. برای گردش یک سرفصل از «صورتحساب سرفصل» استفاده کنید."
     file_stem = "صورت-وضعیت"
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.from_date, self.to_date = self.make_date_range()
-        self.group = QComboBox()
-        self.party = QComboBox(); self.party.setEditable(True)
-        self.group.currentIndexChanged.connect(self._fill_parties)
-        self.group.setToolTip("یک گروه، یا همه گروه‌ها. تفصیلی مشترک در چند گروه با انتخاب گروه محدود می‌شود.")
-        self.add_filter("گروه", combo_with_picker(self.group, "انتخاب گروه"))
-        self.add_filter("شخص / پروژه", combo_with_picker(self.party, "انتخاب تفصیلی"))
+        self.add_filter("گروه", self.make_group_list())
+        self.party_box, self.party_list = self._checkable_list("بدون تیک = هیچ؛ می‌توانید چند شخص/پروژه را هم‌زمان انتخاب کنید")
+        self.group_list.itemChanged.connect(self._reload_parties)
+        self.add_filter("شخص / پروژه", self.party_box)
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
         self.add_filter("ارزها", self.make_currency_list())
@@ -33,37 +31,46 @@ class PartyStatementView(ReportView):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.body.addWidget(self.table, 1)
         self.reload_currencies()
-        self._fill_groups()
+        self.reload_groups()
+        self._reload_parties()
 
-    def _fill_groups(self) -> None:
-        self.group.clear(); self.group.addItem("همه گروه‌ها", None)
-        for g in self.ctx.refdata.groups:
-            self.group.addItem(f"{g.code} {g.name}", g.id)
-        self._fill_parties()
-
-    def _fill_parties(self) -> None:
-        gid = self.group.currentData()
-        self.party.clear(); self.party.addItem("انتخاب کنید", None)
+    def _reload_parties(self) -> None:
+        checked = self._checked_party_ids()
+        gids = set(self.checked_group_ids())
+        self.party_list.blockSignals(True)
+        self.party_list.clear()
         for item in self.ctx.refdata.tafsilis:
-            if gid is None or gid in item.group_ids:
-                self.party.addItem(item.display, item.id)
+            if gids and not (gids & set(item.group_ids)):
+                continue
+            it = QListWidgetItem(item.display)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Checked if item.id in checked else Qt.Unchecked)
+            it.setData(Qt.UserRole, item.id)
+            self.party_list.addItem(it)
+        self.party_list.blockSignals(False)
+
+    def _checked_party_ids(self) -> list[int]:
+        ids = []
+        for i in range(self.party_list.count()):
+            it = self.party_list.item(i)
+            if it.checkState() == Qt.Checked:
+                ids.append(it.data(Qt.UserRole))
+        return ids
 
     def refresh(self) -> None:
-        self.reload_currencies(); self._fill_groups()
+        self.reload_currencies(); self.reload_groups(); self._reload_parties()
 
     def run(self) -> None:
-        if not self.party.currentData():
-            self.warn("تفصیلی را انتخاب کنید.")
+        party_ids = self._checked_party_ids()
+        if not party_ids:
+            self.warn("دست‌کم یک شخص/پروژه را انتخاب کنید.")
             return
-        groups = [self.group.currentData()] if self.group.currentData() else None
         kwargs = self.ready_filters()
         if kwargs is None:
             return
-        if groups:
-            kwargs["group_ids"] = groups
         try:
             with self.ctx.read_session() as db:
-                self._result = party_statement(db, StatementFilter(tafsili_any_id=self.party.currentData(), **kwargs))
+                self._result = party_statement(db, StatementFilter(tafsili_ids=party_ids, **kwargs))
             self.model.set_result(self._result)
             fit_columns(self.table)
             self.summary.setText(f"{len(self._result.rows)} سطر")

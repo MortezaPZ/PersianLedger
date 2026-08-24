@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest.mock import patch
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialogButtonBox
 
 from app import bootstrap, config as config_module
@@ -15,7 +16,7 @@ from app.ui.views.settings_view import SettingsView
 from app.ui.views.trial_balance_view import TrialBalanceView
 from app.ui.views.tafsili_view import TafsiliDialog
 from app.ui.widgets.jalali_date_edit import JalaliDateEdit
-from app.ui.widgets.line_grid import LineRow
+from app.ui.widgets.line_grid import COL_T2, LineRow
 
 
 def _ctx(tmp_path):
@@ -183,6 +184,152 @@ def test_account_dialog_lists_period_natures(qapp, tmp_path):
     assert "بستانکار پایان دوره" in labels
     assert "مهم نیست" in labels
     dialog.close()
+
+
+def test_new_tafsili_from_grid_fills_cell(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    view = DocumentEntryView(ctx)
+    acc = next(
+        a for a in ctx.refdata.postable if ctx.refdata.slot_enabled(a.id, 2)
+    )
+    view.model.setData(view.model.index(0, 1), acc.id)
+    assert view.model.rows[0].tafsili2_id is None
+
+    dialog = type("_D", (), {"exec": lambda self: True, "created_id": None})()
+
+    with ctx.session() as db:
+        group_id = next(iter(ctx.refdata.tafsilis_for(acc.id, 2))).group_id
+        row = master_data.create_tafsili(db, code="9999", name="پروژه تستی", group_id=group_id)
+        new_id = row.id
+    dialog.created_id = new_id
+
+    with patch("app.ui.views.tafsili_view.TafsiliDialog", return_value=dialog):
+        view._new_tafsili(0, 2)
+
+    assert view.model.rows[0].tafsili2_id == new_id
+    index = view.model.index(0, COL_T2)
+    assert view.model.data(index) == "9999 پروژه تستی"
+
+
+def test_document_list_respects_date_range(qapp, tmp_path):
+    from app.ui.views.document_list_view import DocumentListView
+
+    ctx = _ctx(tmp_path)
+    view = DocumentListView(ctx)
+    with ctx.read_session() as db:
+        from app.db.models import Document
+
+        dates = sorted({d.date_j for d in db.query(Document).all()})
+    assert dates, "seed data should contain documents"
+    view.from_date.setText(dates[-1])
+    view.to_date.setText(dates[-1])
+    view.reload()
+    assert view.table.rowCount() > 0
+    for r in range(view.table.rowCount()):
+        assert view.table.item(r, 1).text() == dates[-1]
+
+
+def test_party_statement_supports_multiple_groups_and_parties(qapp, tmp_path):
+    from app.ui.views.party_statement_view import PartyStatementView
+
+    ctx = _ctx(tmp_path)
+    view = PartyStatementView(ctx)
+    by_code = {t.code: t.id for t in ctx.refdata.tafsilis}
+    project_a, project_tehran = by_code["3003"], by_code["3001"]
+
+    def _check(ids: set[int]) -> None:
+        for i in range(view.party_list.count()):
+            it = view.party_list.item(i)
+            it.setCheckState(Qt.Checked if it.data(Qt.UserRole) in ids else Qt.Unchecked)
+
+    _check({project_a})
+    view.run()
+    rows_a = len(view._result.rows)
+    assert rows_a > 0
+
+    _check({project_a, project_tehran})
+    view.run()
+    rows_both = len(view._result.rows)
+    assert rows_both > rows_a
+
+
+def test_tafsili_dialog_shows_home_group_as_membership_and_linked_meoin(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    tafsili = next(t for t in ctx.refdata.tafsilis if t.code == "3003")
+    dialog = TafsiliDialog(ctx, item=tafsili)
+    home_row = next(
+        dialog.extras.item(i)
+        for i in range(dialog.extras.count())
+        if dialog.extras.item(i).data(Qt.UserRole) == tafsili.group_id
+    )
+    assert home_row.checkState() == Qt.Checked
+    assert not (home_row.flags() & Qt.ItemIsEnabled)
+    assert dialog.linked_meoin.text() != "—"
+    dialog.close()
+
+
+def test_tafsili_view_lists_linked_meoin_column(qapp, tmp_path):
+    from app.ui.views.tafsili_view import TafsiliView
+
+    ctx = _ctx(tmp_path)
+    view = TafsiliView(ctx)
+    codes = [view.table.item(r, 0).text() for r in range(view.table.rowCount())]
+    row = codes.index("3003")
+    assert view.table.item(row, 4).text() != ""
+
+
+def test_auth_service_hash_and_authenticate_roundtrip(tmp_path):
+    from app.services import auth_service
+
+    ctx = _ctx(tmp_path)
+    with ctx.session() as db:
+        auth_service.create_user(db, username="admin", display_name="مدیر", password="secret1", is_admin=True)
+    with ctx.session() as db:
+        ok = auth_service.authenticate(db, "admin", "secret1")
+        assert ok is not None
+        assert ok.is_admin
+        bad = auth_service.authenticate(db, "admin", "wrong")
+        assert bad is None
+
+
+def test_login_dialog_first_run_creates_admin(qapp, tmp_path):
+    from app.ui.login_dialog import LoginDialog
+
+    ctx = _ctx(tmp_path)
+    dialog = LoginDialog(ctx)
+    assert dialog._first_run
+    dialog.username_edit.setText("owner")
+    dialog.display_edit.setText("مالک")
+    dialog.password_edit.setText("pass1234")
+    dialog.confirm_edit.setText("pass1234")
+    dialog.accept()
+    assert dialog.user_id is not None
+    assert dialog.is_admin
+
+
+def test_login_dialog_rejects_wrong_password(qapp, tmp_path):
+    from app.services import auth_service
+    from app.ui.login_dialog import LoginDialog
+
+    ctx = _ctx(tmp_path)
+    with ctx.session() as db:
+        auth_service.create_user(db, username="u1", display_name="کاربر یک", password="rightpass")
+    dialog = LoginDialog(ctx)
+    assert not dialog._first_run
+    dialog.username_edit.setText("u1")
+    dialog.password_edit.setText("wrongpass")
+    with patch("app.ui.login_dialog.QMessageBox.warning"):
+        dialog.accept()
+    assert dialog.user_id is None
+
+
+def test_settings_shows_user_management_only_for_admins(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    ctx.is_admin = True
+    view = SettingsView(ctx)
+    from PySide6.QtWidgets import QPushButton
+    texts = {btn.text() for btn in view.findChildren(QPushButton)}
+    assert "مدیریت کاربران" in texts
 
 
 def test_trial_balance_has_no_description_column(qapp, tmp_path):

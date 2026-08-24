@@ -85,7 +85,8 @@ class MainWindow(QMainWindow):
     def __init__(self, ctx: AppContext) -> None:
         super().__init__()
         self.ctx = ctx
-        self.setWindowTitle(f"{APP_NAME_FA} {APP_VERSION}")
+        title_suffix = f" — {ctx.display_name}" if ctx.display_name else ""
+        self.setWindowTitle(f"{APP_NAME_FA} {APP_VERSION}{title_suffix}")
         self.setLayoutDirection(Qt.RightToLeft)
         self.resize(1280, 800)
         central = QWidget()

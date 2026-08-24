@@ -56,6 +56,16 @@ class RefData:
             return []
         return [t for t in self.tafsilis if t.is_active and t.group_ids & allowed]
 
+    def moein_accounts_for_groups(self, group_ids: set[int]) -> list[Account]:
+        """معین accounts whose تفصیلی rules accept any of the given تفصیلی groups."""
+        if not group_ids:
+            return []
+        out = []
+        for account in self.accounts:
+            if any(r.tafsili_group_id in group_ids for r in account.tafsili_rules):
+                out.append(account)
+        return out
+
     def currencies_for(self, account_id: int | None) -> list[Currency]:
         account = self.account_by_id.get(account_id or 0)
         active = [c for c in self.currencies if c.is_active]

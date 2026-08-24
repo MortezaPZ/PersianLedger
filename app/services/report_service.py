@@ -21,6 +21,7 @@ class StatementFilter:
     account_ids: list[int] | None = None
     tafsili_id: int | None = None
     tafsili_any_id: int | None = None
+    tafsili_ids: list[int] | None = None
     date_from: _dt.date | None = None
     date_to: _dt.date | None = None
     currency_ids: list[int] | None = None
@@ -85,6 +86,10 @@ def _apply_scope(stmt: Select, flt: StatementFilter) -> Select:
     if flt.tafsili_any_id:
         stmt = stmt.where(
             or_(DocumentLine.tafsili1_id == flt.tafsili_any_id, DocumentLine.tafsili2_id == flt.tafsili_any_id)
+        )
+    if flt.tafsili_ids:
+        stmt = stmt.where(
+            or_(DocumentLine.tafsili1_id.in_(flt.tafsili_ids), DocumentLine.tafsili2_id.in_(flt.tafsili_ids))
         )
     if flt.currency_ids:
         stmt = stmt.where(DocumentLine.currency_id.in_(flt.currency_ids))
@@ -196,10 +201,17 @@ def account_statement(session: Session, flt: StatementFilter) -> StatementResult
 
 
 def party_statement(session: Session, flt: StatementFilter) -> StatementResult:
-    item = session.get(Tafsili, flt.tafsili_any_id or flt.tafsili_id)
-    title = f"صورت وضعیت اشخاص — {item.display}" if item else "صورت وضعیت اشخاص"
+    ids = flt.tafsili_ids or ([flt.tafsili_any_id or flt.tafsili_id] if (flt.tafsili_any_id or flt.tafsili_id) else [])
+    if len(ids) == 1:
+        item = session.get(Tafsili, ids[0])
+        title = f"صورت وضعیت اشخاص — {item.display}" if item else "صورت وضعیت اشخاص"
+    elif ids:
+        title = f"صورت وضعیت اشخاص — {len(ids)} مورد"
+    else:
+        title = "صورت وضعیت اشخاص"
     cloned = StatementFilter(
-        tafsili_any_id=flt.tafsili_any_id or flt.tafsili_id,
+        tafsili_any_id=ids[0] if len(ids) == 1 else None,
+        tafsili_ids=ids if len(ids) > 1 else None,
         date_from=flt.date_from,
         date_to=flt.date_to,
         currency_ids=flt.currency_ids,

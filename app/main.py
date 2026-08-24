@@ -4,12 +4,13 @@ import logging
 import sys
 import traceback
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from app import bootstrap, config as config_module, logging_setup
 from app.db.migrate import SchemaTooNewError
 from app.ui import theme
 from app.ui.context import AppContext
+from app.ui.login_dialog import LoginDialog
 from app.ui.main_window import MainWindow
 from app.version import APP_ID, APP_NAME_FA, APP_VERSION
 
@@ -50,6 +51,13 @@ def main(argv: list[str] | None = None) -> int:
             f"ساختار دیتابیس به‌روزرسانی شد.\nنسخه پشتیبان پیش از به‌روزرسانی:\n{startup.migration.backup_path}",
         )
     context = AppContext(startup)
+    login = LoginDialog(context)
+    if login.exec() != QDialog.Accepted:
+        return 0
+    context.user_id = login.user_id
+    context.username = login.username
+    context.display_name = login.display_name
+    context.is_admin = login.is_admin
     window = MainWindow(context)
     window.show()
     return app.exec()

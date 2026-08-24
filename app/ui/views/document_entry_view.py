@@ -299,3 +299,7 @@ class DocumentEntryView(BaseView):
         if dialog.exec():
             self.ctx.reload_refdata()
             self.model.ref = self.ctx.refdata
+            if dialog.created_id is not None:
+                column = COL_T1 if slot == 1 else COL_T2
+                index = self.model.index(row, column)
+                self.model.setData(index, dialog.created_id)

@@ -27,12 +27,130 @@ from app import config as config_module
 from app.db import engine as engine_module
 from app.db import migrate
 from app.domain.errors import LedgerError
-from app.services import backup_service, master_data
+from app.services import auth_service, backup_service, master_data
 from app.ui import theme
 from app.ui.views.base_view import BaseView
 from app.ui.widgets import fields
 from app.ui.widgets.tables import fit_columns, size_to_rows
 from app.version import APP_NAME_FA, APP_VERSION
+
+
+class UserDialog(QDialog):
+    def __init__(self, context, parent=None, user=None) -> None:
+        super().__init__(parent)
+        self.ctx = context
+        self.user = user
+        self.setWindowTitle("ویرایش کاربر" if user else "کاربر جدید")
+        self.setLayoutDirection(Qt.RightToLeft)
+        form = QFormLayout(self)
+        self.username = QLineEdit()
+        self.display_name = QLineEdit()
+        self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
+        self.is_admin = QCheckBox("مدیر سیستم")
+        self.is_active = QCheckBox("فعال")
+        self.is_active.setChecked(True)
+        form.addRow("نام کاربری", self.username)
+        form.addRow("نام نمایشی", self.display_name)
+        if user:
+            self.username.setText(user.username)
+            self.username.setReadOnly(True)
+            self.display_name.setText(user.display_name)
+            self.is_admin.setChecked(user.is_admin)
+            self.is_active.setChecked(user.is_active)
+            form.addRow("رمز عبور جدید (خالی = بدون تغییر)", self.password)
+            form.addRow(self.is_active)
+        else:
+            form.addRow("رمز عبور", self.password)
+        form.addRow(self.is_admin)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        fields.localize_dialog_buttons(buttons)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def accept(self) -> None:
+        try:
+            with self.ctx.session() as db:
+                if self.user is None:
+                    auth_service.create_user(
+                        db,
+                        username=self.username.text(),
+                        display_name=self.display_name.text(),
+                        password=self.password.text(),
+                        is_admin=self.is_admin.isChecked(),
+                        created_by=self.ctx.user_id,
+                    )
+                else:
+                    row = db.merge(self.user)
+                    row.display_name = (self.display_name.text() or "").strip() or row.username
+                    if self.password.text().strip():
+                        auth_service.set_password(db, row, self.password.text(), user_id=self.ctx.user_id)
+                    auth_service.set_admin(db, row, self.is_admin.isChecked(), user_id=self.ctx.user_id)
+                    auth_service.set_active(db, row, self.is_active.isChecked(), user_id=self.ctx.user_id)
+            super().accept()
+        except LedgerError as exc:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, APP_NAME_FA, str(exc))
+
+
+class UsersDialog(QDialog):
+    def __init__(self, context, parent=None) -> None:
+        super().__init__(parent)
+        self.ctx = context
+        self.setWindowTitle("کاربران")
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.resize(520, 360)
+        layout = QVBoxLayout(self)
+        bar = QHBoxLayout()
+        add = QPushButton("کاربر جدید"); add.setProperty("kind", "primary")
+        edit = QPushButton("ویرایش")
+        add.clicked.connect(self.add_user)
+        edit.clicked.connect(self.edit_user)
+        bar.addWidget(add); bar.addWidget(edit); bar.addStretch()
+        layout.addLayout(bar)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["نام کاربری", "نام نمایشی", "مدیر", "وضعیت"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.doubleClicked.connect(self.edit_user)
+        layout.addWidget(self.table)
+        close = QDialogButtonBox(QDialogButtonBox.Close)
+        close.rejected.connect(self.reject)
+        close.button(QDialogButtonBox.Close).clicked.connect(self.reject)
+        layout.addWidget(close)
+        self.reload()
+
+    def reload(self) -> None:
+        with self.ctx.read_session() as db:
+            users = auth_service.list_users(db)
+        self.table.setRowCount(len(users))
+        for r, u in enumerate(users):
+            values = (u.username, u.display_name, "بله" if u.is_admin else "خیر", "فعال" if u.is_active else "غیرفعال")
+            for c, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setData(Qt.UserRole, u.id)
+                self.table.setItem(r, c, item)
+        fit_columns(self.table)
+
+    def _selected(self):
+        row = self.table.currentRow()
+        if row < 0:
+            return None
+        uid = self.table.item(row, 0).data(Qt.UserRole)
+        with self.ctx.read_session() as db:
+            from app.db.models import User
+            return db.get(User, uid)
+
+    def add_user(self) -> None:
+        if UserDialog(self.ctx, self).exec():
+            self.reload()
+
+    def edit_user(self) -> None:
+        user = self._selected()
+        if not user:
+            return
+        if UserDialog(self.ctx, self, user=user).exec():
+            self.reload()
 
 
 class CurrencyDialog(QDialog):
@@ -201,6 +319,14 @@ class SettingsView(BaseView):
         self.backup_table.setHorizontalHeaderLabels(["فایل", "حجم", "تاریخ"])
         layout.addWidget(self.backup_table)
         self.body.addWidget(box)
+        if self.ctx.is_admin:
+            users_box = QGroupBox("کاربران")
+            users_layout = QVBoxLayout(users_box)
+            users_btn = QPushButton("مدیریت کاربران")
+            users_btn.setProperty("kind", "primary")
+            users_btn.clicked.connect(self.manage_users)
+            users_layout.addWidget(users_btn)
+            self.body.addWidget(users_box)
         help_btn = QPushButton("پاسخ پرسش‌های راهنما")
         help_btn.clicked.connect(self.open_answers)
         self.body.addWidget(help_btn)
@@ -285,6 +411,9 @@ class SettingsView(BaseView):
         if FiscalYearDialog(self.ctx, self).exec():
             self.ctx.reload_refdata()
             self.reload()
+
+    def manage_users(self) -> None:
+        UsersDialog(self.ctx, self).exec()
 
     def open_answers(self) -> None:
         from app import paths

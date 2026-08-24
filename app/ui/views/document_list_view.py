@@ -57,6 +57,12 @@ class DocumentListView(BaseView):
             status = self.status.currentData()
             if status:
                 stmt = stmt.where(Document.status == status)
+            date_from = self.from_date.gregorian()
+            if date_from:
+                stmt = stmt.where(Document.date_g >= date_from)
+            date_to = self.to_date.gregorian()
+            if date_to:
+                stmt = stmt.where(Document.date_g <= date_to)
             if self.search.text().strip():
                 stmt = stmt.where(Document.description.contains(self.search.text().strip()))
             docs = list(db.execute(stmt.limit(500)).scalars())

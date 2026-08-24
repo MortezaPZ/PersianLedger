@@ -21,6 +21,9 @@ class AppContext(QObject):
         self.startup = startup
         self.config = startup.config
         self.user_id = None
+        self.username: str | None = None
+        self.display_name: str | None = None
+        self.is_admin: bool = False
         self._refdata: RefData | None = None
         self._fiscal_year_id: int | None = None
 
