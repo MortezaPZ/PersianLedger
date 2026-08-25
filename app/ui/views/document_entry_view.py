@@ -49,6 +49,7 @@ class DocumentEntryView(BaseView):
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.document = None
+        self.document_id: int | None = None
         card = QFrame()
         card.setObjectName("Card")
         grid = QGridLayout(card)
@@ -167,17 +168,29 @@ class DocumentEntryView(BaseView):
             ],
         )
 
+    def _remember(self, doc) -> None:
+        """Keep identity in plain values.
+
+        A rolled-back session expires every object it touched, so an ORM
+        instance held across sessions can become permanently unreadable. Only
+        the id survives that, and it is all we need to load the row again.
+        """
+        self.document = doc
+        self.document_id = doc.id if doc is not None else None
+
     def save_draft(self) -> None:
         try:
             with self.ctx.session() as db:
                 data = self._input()
-                current = db.merge(self.document) if self.document and self.document.id else None
-                self.document = document_service.save_draft(db, data, current, self.ctx.user_id)
-                db.refresh(self.document)
-                list(self.document.attachments)
-            self.number_edit.setText(str(self.document.number))
-            self.attachments.set_document(self.document)
-            self.inform(f"پیش‌نویس شماره {self.document.number} ذخیره شد.")
+                current = document_service.load(db, self.document_id) if self.document_id else None
+                doc = document_service.save_draft(db, data, current, self.ctx.user_id)
+                db.refresh(doc)
+                list(doc.attachments)
+                number = doc.number
+            self._remember(doc)
+            self.number_edit.setText(str(number))
+            self.attachments.set_document(doc)
+            self.inform(f"پیش‌نویس شماره {number} ذخیره شد.")
             self.ctx.dataChanged.emit()
         except LedgerError as exc:
             self.warn(str(exc))
@@ -188,14 +201,16 @@ class DocumentEntryView(BaseView):
         try:
             with self.ctx.session() as db:
                 data = self._input()
-                current = db.merge(self.document) if self.document and self.document.id else None
-                self.document = document_service.save_and_post(db, data, current, self.ctx.user_id)
+                current = document_service.load(db, self.document_id) if self.document_id else None
+                doc = document_service.save_and_post(db, data, current, self.ctx.user_id)
                 master_data.lock_used_currencies(db)
-                list(self.document.attachments)
-            self.number_edit.setText(str(self.document.number))
+                list(doc.attachments)
+                number = doc.number
+            self._remember(doc)
+            self.number_edit.setText(str(number))
             self.model.read_only = True
-            self.attachments.set_document(self.document)
-            self.inform(f"سند شماره {self.document.number} قطعی شد.")
+            self.attachments.set_document(doc)
+            self.inform(f"سند شماره {number} قطعی شد.")
             self.ctx.dataChanged.emit()
             self.ctx.reload_refdata()
         except LedgerError as exc:
@@ -204,19 +219,20 @@ class DocumentEntryView(BaseView):
             self.report_error(exc)
 
     def _abandon_open_draft(self) -> bool:
-        doc = self.document
-        if doc is None or not getattr(doc, "id", None):
+        if not self.document_id:
             return True
-        if getattr(doc, "is_posted", False):
-            return True
-        number = doc.number
+        with self.ctx.read_session() as db:
+            current = document_service.load(db, self.document_id)
+            if current is None or current.is_posted:
+                return True
+            number = current.number
         if not self.confirm(
             f"پیش‌نویس شماره {number} هنوز قطعی نشده. با ادامه، حذف می‌شود و شماره آزاد می‌گردد."
         ):
             return False
         try:
             with self.ctx.session() as db:
-                current = document_service.load(db, doc.id)
+                current = document_service.load(db, self.document_id)
                 if current and not current.is_posted:
                     document_service.delete_draft(db, current, self.ctx.user_id)
             self.ctx.dataChanged.emit()
@@ -231,13 +247,13 @@ class DocumentEntryView(BaseView):
         self.clear()
 
     def load_document(self, document_id: int) -> None:
-        if self.document and self.document.id and self.document.id != document_id:
+        if self.document_id and self.document_id != document_id:
             if not self._abandon_open_draft():
                 return
-            self.document = None
+            self._remember(None)
         with self.ctx.read_session() as db:
             doc = document_service.load(db, document_id)
-            self.document = doc
+            self._remember(doc)
             if not doc:
                 return
             self.number_edit.setText(doc.number_display)
@@ -263,7 +279,7 @@ class DocumentEntryView(BaseView):
             self.attachments.set_document(doc)
 
     def clear(self) -> None:
-        self.document = None
+        self._remember(None)
         self.model.read_only = False
         self.model.set_rows([LineRow(), LineRow()])
         self.desc_edit.clear()

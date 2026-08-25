@@ -120,7 +120,7 @@ def _attach_empty_draft(ctx):
 def test_new_document_releases_draft_number(qapp, tmp_path):
     ctx = _ctx(tmp_path)
     view = DocumentEntryView(ctx)
-    view.document = _attach_empty_draft(ctx)
+    view._remember(_attach_empty_draft(ctx))
     number = view.document.number
     with patch.object(view, "confirm", return_value=True):
         view.new_document()
@@ -133,7 +133,7 @@ def test_new_document_releases_draft_number(qapp, tmp_path):
 def test_new_document_cancel_keeps_draft(qapp, tmp_path):
     ctx = _ctx(tmp_path)
     view = DocumentEntryView(ctx)
-    view.document = _attach_empty_draft(ctx)
+    view._remember(_attach_empty_draft(ctx))
     kept = view.document.id
     with patch.object(view, "confirm", return_value=False):
         view.new_document()
@@ -330,6 +330,42 @@ def test_settings_shows_user_management_only_for_admins(qapp, tmp_path):
     from PySide6.QtWidgets import QPushButton
     texts = {btn.text() for btn in view.findChildren(QPushButton)}
     assert "مدیریت کاربران" in texts
+
+
+def test_failed_save_does_not_poison_the_open_document(qapp, tmp_path):
+    """A rolled-back session must not leave the view holding an expired object."""
+    ctx = _ctx(tmp_path)
+    view = DocumentEntryView(ctx)
+    acc = next(
+        a for a in ctx.refdata.postable
+        if not ctx.refdata.slot_required(a.id, 1) and not ctx.refdata.slot_required(a.id, 2)
+    )
+    cur = ctx.refdata.currencies[0]
+    rows = [
+        LineRow(acc.id, None, None, cur.id, Decimal("10"), Decimal("0")),
+        LineRow(acc.id, None, None, cur.id, Decimal("0"), Decimal("10")),
+    ]
+    errors = []
+    with patch.object(view, "inform"), patch.object(view, "warn"), \
+            patch.object(view, "report_error", side_effect=lambda exc: errors.append(exc)):
+        view.model.set_rows(list(rows))
+        view.save_draft()
+        assert view.document_id
+
+        view.model.set_rows(list(rows))
+        with patch(
+            "app.ui.views.document_entry_view.master_data.lock_used_currencies",
+            side_effect=RuntimeError("boom"),
+        ):
+            view.post()
+        assert len(errors) == 1
+
+        errors.clear()
+        view.model.set_rows(list(rows))
+        view.post()
+
+    assert not errors, f"retry after a failed save must work, got {errors}"
+    assert view.document.is_posted
 
 
 def test_trial_balance_has_no_description_column(qapp, tmp_path):
