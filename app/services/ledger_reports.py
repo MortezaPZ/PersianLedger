@@ -29,10 +29,23 @@ def _sql_money(value) -> Decimal:
 LEVEL_KOL = "kol"
 LEVEL_MOIN = "moin"
 LEVEL_TAFSILI = "tafsili"
+LEVEL_TAFSILI2 = "tafsili2"
 LEVEL_GROUP = "group"
-LEVEL_FA = {LEVEL_KOL: "کل", LEVEL_MOIN: "معین", LEVEL_TAFSILI: "تفصیلی"}
-BROWSE_LEVELS = (LEVEL_GROUP, LEVEL_KOL, LEVEL_MOIN, LEVEL_TAFSILI)
-BROWSE_LEVEL_FA = {LEVEL_GROUP: "گروه", LEVEL_KOL: "کل", LEVEL_MOIN: "معین", LEVEL_TAFSILI: "تفصیلی"}
+LEVEL_FA = {
+    LEVEL_KOL: "کل",
+    LEVEL_MOIN: "معین",
+    LEVEL_TAFSILI: "تفصیلی ۱",
+    LEVEL_TAFSILI2: "تفصیلی ۲",
+}
+TAFSILI_LEVELS = (LEVEL_TAFSILI, LEVEL_TAFSILI2)
+BROWSE_LEVELS = (LEVEL_GROUP, LEVEL_KOL, LEVEL_MOIN, LEVEL_TAFSILI, LEVEL_TAFSILI2)
+BROWSE_LEVEL_FA = {
+    LEVEL_GROUP: "گروه",
+    LEVEL_KOL: "کل",
+    LEVEL_MOIN: "معین",
+    LEVEL_TAFSILI: "تفصیلی ۱",
+    LEVEL_TAFSILI2: "تفصیلی ۲",
+}
 COLUMN_SETS = (2, 4, 6)
 NO_TAFSILI = 0
 
@@ -156,14 +169,14 @@ def trial_balance(session: Session, flt: StatementFilter, level: str = LEVEL_MOI
     columns = columns if columns in COLUMN_SETS else 4
     opening: dict[tuple[int, int], tuple[Decimal, Decimal]] = {}
     if flt.include_opening and flt.date_from:
-        opening = _aggregate(session, flt, _group_column(level), None, _day_before(flt.date_from), keep_null_key=level == LEVEL_TAFSILI)
+        opening = _aggregate(session, flt, _group_column(level), None, _day_before(flt.date_from), keep_null_key=level in TAFSILI_LEVELS)
     turnover = _aggregate(
         session,
         flt,
         _group_column(level),
         flt.date_from,
         flt.date_to,
-        keep_null_key=level == LEVEL_TAFSILI,
+        keep_null_key=level in TAFSILI_LEVELS,
     )
     currencies = _currencies_from_maps(session, [opening, turnover], flt)
     names = _names_for_level(session, level)
@@ -212,6 +225,8 @@ def _group_column(level: str):
         return Account.parent_id
     if level == LEVEL_TAFSILI:
         return DocumentLine.tafsili1_id
+    if level == LEVEL_TAFSILI2:
+        return DocumentLine.tafsili2_id
     if level == LEVEL_GROUP:
         return Account.group_id
     return DocumentLine.account_id
@@ -245,7 +260,7 @@ def _opening_allowed_by_key(session: Session, level: str) -> dict[int, bool]:
 def _names_for_level(session: Session, level: str) -> dict[int, tuple[str, str]]:
     if level == LEVEL_GROUP:
         return {g.id: (g.code, g.name) for g in session.execute(select(AccountGroup)).scalars()}
-    if level == LEVEL_TAFSILI:
+    if level in TAFSILI_LEVELS:
         names = {t.id: (t.code, t.name) for t in session.execute(select(Tafsili)).scalars()}
         names[NO_TAFSILI] = ("", "بدون تفصیلی")
         return names
@@ -522,6 +537,8 @@ __all__ = (
     "LEVEL_KOL",
     "LEVEL_MOIN",
     "LEVEL_TAFSILI",
+    "LEVEL_TAFSILI2",
+    "TAFSILI_LEVELS",
     "LEVEL_GROUP",
     "LEVEL_FA",
     "BROWSE_LEVELS",

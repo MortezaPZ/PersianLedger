@@ -4,7 +4,11 @@ from PySide6.QtGui import QTextDocument
 from PySide6.QtPrintSupport import QPrintPreviewDialog, QPrinter
 from PySide6.QtWidgets import QWidget
 
+from decimal import Decimal
+
 from app.domain import money
+
+ZERO = Decimal(0)
 
 
 def preview(parent: QWidget | None, html: str) -> None:
@@ -87,7 +91,7 @@ def income_statement_html(result) -> str:
     def totals_cells(label, amounts):
         cells = ["", label]
         for col in result.currencies:
-            cells.append(money.format_amount(amounts.get(col.id, 0), col.decimals, True))
+            cells.append(money.format_amount(amounts.get(col.id, ZERO), col.decimals, True))
         return cells
 
     rows = [line_cells(ln) for ln in result.income]

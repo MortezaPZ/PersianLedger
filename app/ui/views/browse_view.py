@@ -169,7 +169,7 @@ class BrowseView(ReportView):
             elif self._level == lr.LEVEL_MOIN:
                 ids = list(db.execute(select(Account.id).where(Account.parent_id == ident)).scalars())
                 flt.account_ids = ids or [ident]
-            elif self._level == lr.LEVEL_TAFSILI:
+            elif self._level in lr.TAFSILI_LEVELS:
                 flt.account_id = ident
         return flt
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -125,10 +126,10 @@ def export_income_statement(path: Path, result) -> None:
 
     for line in result.income:
         put(line.code, line.name, line, lambda a, col: a.amount(col.id))
-    put("", "جمع درآمدها", result.income_total, lambda a, col: a.get(col.id, 0))
+    put("", "جمع درآمدها", result.income_total, lambda a, col: a.get(col.id, Decimal(0)))
     for line in result.expense:
         put(line.code, line.name, line, lambda a, col: a.amount(col.id))
-    put("", "جمع هزینه‌ها", result.expense_total, lambda a, col: a.get(col.id, 0))
-    put("", "سود (زیان) خالص", result.net, lambda a, col: a.get(col.id, 0))
+    put("", "جمع هزینه‌ها", result.expense_total, lambda a, col: a.get(col.id, Decimal(0)))
+    put("", "سود (زیان) خالص", result.net, lambda a, col: a.get(col.id, Decimal(0)))
     _autosize(ws)
     wb.save(path)

@@ -85,7 +85,7 @@ class IncomeStatementView(ReportView):
         self.from_date, self.to_date = self.make_date_range()
         self.level = QComboBox()
         for key, label in lr.LEVEL_FA.items():
-            if key != lr.LEVEL_TAFSILI:
+            if key not in lr.TAFSILI_LEVELS:
                 self.level.addItem(label, key)
         self.level.setCurrentIndex(self.level.count() - 1)
         self.add_filter("از تاریخ", self.from_date)

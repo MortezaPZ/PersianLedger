@@ -450,3 +450,38 @@ def test_income_statement_reports_net_result(qapp, tmp_path):
     labels = [view.model.data(view.model.index(r, 1)) for r in range(view.model.rowCount())]
     assert "درآمدها" in labels and "هزینه‌ها" in labels
     assert "سود (زیان) خالص" in labels
+
+
+def test_income_statement_prints_when_a_currency_has_no_income(qapp, tmp_path):
+    """Printing must not crash on a currency that only has expenses."""
+    from app.export import excel, printing
+    from app.services import ledger_reports as lr
+    from app.services.report_service import StatementFilter
+
+    ctx = _ctx(tmp_path)
+    all_currency_ids = [c.id for c in ctx.refdata.currencies]
+    with ctx.read_session() as db:
+        result = lr.income_statement(db, StatementFilter(currency_ids=all_currency_ids))
+    assert len(result.currencies) > 1, "need several currency columns for this to bite"
+    html = printing.income_statement_html(result)
+    assert "سود (زیان) خالص" in html
+    excel.export_income_statement(tmp_path / "pnl.xlsx", result)
+    assert (tmp_path / "pnl.xlsx").exists()
+
+
+def test_trial_balance_can_group_by_tafsili_2(qapp, tmp_path):
+    """Projects live in the تفصیلی ۲ slot, so that level has to be reportable."""
+    from app.services import ledger_reports as lr
+    from app.services.report_service import StatementFilter
+
+    ctx = _ctx(tmp_path)
+    assert lr.LEVEL_TAFSILI2 in lr.LEVEL_FA
+    with ctx.read_session() as db:
+        slot1 = lr.trial_balance(db, StatementFilter(), level=lr.LEVEL_TAFSILI, columns=4)
+        slot2 = lr.trial_balance(db, StatementFilter(), level=lr.LEVEL_TAFSILI2, columns=4)
+    names1 = {r.code for r in slot1.rows}
+    names2 = {r.code for r in slot2.rows}
+    assert "3105" not in names1, "پروژه A is only ever in slot 2"
+    assert "3105" in names2, "grouping by تفصیلی ۲ must surface the project"
+    project = next(r for r in slot2.rows if r.code == "3105")
+    assert any(project.cell(4, 0, c.id) for c in slot2.currencies), "project must show turnover"
