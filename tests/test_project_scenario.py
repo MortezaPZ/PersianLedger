@@ -37,7 +37,7 @@ def test_project_a_scenario():
 
     accounts = {a.code: a for a in session.execute(select(Account)).scalars()}
     tafsilis = {t.code: t for t in session.execute(select(Tafsili)).scalars()}
-    project = tafsilis["3003"]
+    project = tafsilis["3105"]
     assert project.group.code == "30"
     assert len(project.group_ids) >= 2
 

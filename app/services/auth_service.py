@@ -34,6 +34,18 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(actual, expected)
 
 
+def valid_user_id(session: Session, user_id: int | None) -> int | None:
+    """`user_id` only if that row exists in *this* database, otherwise None.
+
+    A restored backup can be missing the signed-in account. Writing its id into
+    a foreign key would abort the whole transaction, so an unknown id is
+    recorded as "no user" rather than blocking the user's accounting work.
+    """
+    if user_id is None:
+        return None
+    return user_id if session.get(User, user_id) is not None else None
+
+
 def has_any_users(session: Session) -> bool:
     return bool(session.execute(select(exists().where(User.id.isnot(None)))).scalar())
 

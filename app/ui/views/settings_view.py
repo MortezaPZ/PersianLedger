@@ -458,6 +458,7 @@ class SettingsView(BaseView):
             safety = backup_service.restore(engine_module.get_engine(), self.ctx.config, Path(path))
             engine_module.init_engine(self.ctx.config)
             migrate.upgrade_to_head(engine_module.get_engine(), self.ctx.config)
+            self.ctx.resync_user()
             self.ctx.reload_refdata()
             self.ctx.dataChanged.emit()
             if callable(self.after_restore):

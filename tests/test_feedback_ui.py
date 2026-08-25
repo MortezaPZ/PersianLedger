@@ -235,7 +235,7 @@ def test_party_statement_supports_multiple_groups_and_parties(qapp, tmp_path):
     ctx = _ctx(tmp_path)
     view = PartyStatementView(ctx)
     by_code = {t.code: t.id for t in ctx.refdata.tafsilis}
-    project_a, project_tehran = by_code["3003"], by_code["3001"]
+    project_a, project_tehran = by_code["3105"], by_code["3001"]
 
     def _check(ids: set[int]) -> None:
         for i in range(view.party_list.count()):
@@ -255,7 +255,7 @@ def test_party_statement_supports_multiple_groups_and_parties(qapp, tmp_path):
 
 def test_tafsili_dialog_shows_home_group_as_membership_and_linked_meoin(qapp, tmp_path):
     ctx = _ctx(tmp_path)
-    tafsili = next(t for t in ctx.refdata.tafsilis if t.code == "3003")
+    tafsili = next(t for t in ctx.refdata.tafsilis if t.code == "3105")
     dialog = TafsiliDialog(ctx, item=tafsili)
     home_row = next(
         dialog.extras.item(i)
@@ -274,7 +274,7 @@ def test_tafsili_view_lists_linked_meoin_column(qapp, tmp_path):
     ctx = _ctx(tmp_path)
     view = TafsiliView(ctx)
     codes = [view.table.item(r, 0).text() for r in range(view.table.rowCount())]
-    row = codes.index("3003")
+    row = codes.index("3105")
     assert view.table.item(row, 4).text() != ""
 
 
@@ -374,3 +374,79 @@ def test_trial_balance_has_no_description_column(qapp, tmp_path):
     assert "شرح" not in TrialBalanceView.hint
     from app.ui.views.trial_balance_view import TrialBalanceModel
     assert TrialBalanceModel()._headers() == []
+
+
+def test_stale_user_id_does_not_block_saving(qapp, tmp_path):
+    """A restored backup can lack the signed-in account; writes must still work."""
+    from app.services import auth_service
+
+    ctx = _ctx(tmp_path)
+    ctx.user_id = 9999  # no such row
+    view = DocumentEntryView(ctx)
+    acc = next(
+        a for a in ctx.refdata.postable
+        if not ctx.refdata.slot_required(a.id, 1) and not ctx.refdata.slot_required(a.id, 2)
+    )
+    cur = ctx.refdata.currencies[0]
+    view.model.set_rows([
+        LineRow(acc.id, None, None, cur.id, Decimal("10"), Decimal("0")),
+        LineRow(acc.id, None, None, cur.id, Decimal("0"), Decimal("10")),
+    ])
+    errors = []
+    with patch.object(view, "inform"), patch.object(view, "warn"), \
+            patch.object(view, "report_error", side_effect=lambda e: errors.append(e)):
+        view.save_draft()
+    assert not errors, f"stale user id must not abort the write: {errors}"
+    assert view.document_id
+    with ctx.read_session() as db:
+        assert auth_service.valid_user_id(db, 9999) is None
+
+
+def test_accounts_tree_edit_loads_kol_and_moin(qapp, tmp_path):
+    """The dialog reads relationships, so the row must come back eager-loaded."""
+    ctx = _ctx(tmp_path)
+    view = AccountsView(ctx)
+    for level in (1, 2):
+        ident = next(a.id for a in ctx.refdata.accounts if a.level == level)
+        acc = view._load_account(ident)
+        dialog = AccountDialog(ctx, None, account=acc)
+        assert dialog.code.text() == acc.code
+        assert acc.tafsili_rules is not None
+        dialog.close()
+
+
+def test_project_example_is_seeded_without_demo_flag(qapp, tmp_path):
+    from app.db.models import Document, DocumentLine, Tafsili
+
+    data = tmp_path / "plain"
+    data.mkdir(parents=True, exist_ok=True)
+    cfg = config_module.AppConfig(data_dir=data, sqlite_path=data / "ledger.sqlite3")
+    ctx = AppContext(bootstrap.start(cfg))  # no with_demo
+    with ctx.read_session() as db:
+        descriptions = [d.description for d in db.query(Document).all()]
+        assert any("پروژه A" in d for d in descriptions), descriptions
+        person = db.query(Tafsili).filter(Tafsili.code == "2106").one()
+        assert len(person.group_ids) == 2, "نفر A must sit in both اشخاص and صندوق‌ها"
+        cash = db.query(DocumentLine).filter(DocumentLine.description.like("%نفر A%")).one()
+        assert cash.tafsili1_id == person.id
+        assert db.get(Tafsili, cash.tafsili2_id).code == "3105"
+
+
+def test_income_statement_reports_net_result(qapp, tmp_path):
+    from app.services import ledger_reports as lr
+    from app.services.report_service import StatementFilter
+    from app.ui.views.income_statement_view import IncomeStatementView
+
+    ctx = _ctx(tmp_path)
+    with ctx.read_session() as db:
+        result = lr.income_statement(db, StatementFilter())
+    assert result.expense, "the seeded example has expenses"
+    for col in result.currencies:
+        expected = result.income_total.get(col.id, Decimal(0)) - result.expense_total.get(col.id, Decimal(0))
+        assert result.net[col.id] == expected
+
+    view = IncomeStatementView(ctx)
+    view.run()
+    labels = [view.model.data(view.model.index(r, 1)) for r in range(view.model.rowCount())]
+    assert "درآمدها" in labels and "هزینه‌ها" in labels
+    assert "سود (زیان) خالص" in labels

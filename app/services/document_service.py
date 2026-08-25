@@ -17,7 +17,7 @@ from app.domain import money
 from app.domain.enums import AuditAction, DocumentStatus, DocumentType
 from app.domain.errors import ImmutableDocumentError, UnbalancedDocumentError, ValidationError
 from app.repositories import sequences
-from app.services import audit
+from app.services import audit, auth_service
 
 
 @dataclass
@@ -234,7 +234,10 @@ def save_draft(
         raise ImmutableDocumentError(document.number or 0)
     creating = document is None
     if creating:
-        document = Document(status=DocumentStatus.DRAFT, created_by_user_id=user_id)
+        document = Document(
+            status=DocumentStatus.DRAFT,
+            created_by_user_id=auth_service.valid_user_id(session, user_id),
+        )
         session.add(document)
     document.fiscal_year_id = data.fiscal_year_id
     document.date_g = data.date_g
@@ -281,7 +284,7 @@ def post(session: Session, document: Document, user_id: int | None = None) -> Do
     validate(session, data)
     _ensure_number(session, document)
     document.status = DocumentStatus.POSTED
-    document.posted_by_user_id = user_id
+    document.posted_by_user_id = auth_service.valid_user_id(session, user_id)
     document.posted_at = _dt.datetime.now()
     session.flush()
     audit.record(

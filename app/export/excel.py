@@ -106,3 +106,29 @@ def export_journal(path: Path, result) -> None:
             ws.cell(r, c, value if value != "" else None)
     _autosize(ws)
     wb.save(path)
+
+
+def export_income_statement(path: Path, result) -> None:
+    wb = _book()
+    ws = wb.active
+    ws.title = "سود و زیان"
+    headers = ["کد", "عنوان"] + [col.code for col in result.currencies]
+    _write_header(ws, 1, headers)
+    row_no = 2
+
+    def put(code, name, amounts, getter):
+        nonlocal row_no
+        values = [code, name] + [getter(amounts, col) for col in result.currencies]
+        for c, value in enumerate(values, start=1):
+            ws.cell(row_no, c, value)
+        row_no += 1
+
+    for line in result.income:
+        put(line.code, line.name, line, lambda a, col: a.amount(col.id))
+    put("", "جمع درآمدها", result.income_total, lambda a, col: a.get(col.id, 0))
+    for line in result.expense:
+        put(line.code, line.name, line, lambda a, col: a.amount(col.id))
+    put("", "جمع هزینه‌ها", result.expense_total, lambda a, col: a.get(col.id, 0))
+    put("", "سود (زیان) خالص", result.net, lambda a, col: a.get(col.id, 0))
+    _autosize(ws)
+    wb.save(path)

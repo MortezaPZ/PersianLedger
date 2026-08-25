@@ -226,9 +226,28 @@ class AccountsView(BaseView):
         kind, ident = self._current_payload()
         if kind != "account":
             return None
+        return self._load_account(ident)
+
+    def _load_account(self, ident):
+        """Load with the relationships the dialog reads already populated.
+
+        The session closes when this returns, so anything left lazy would raise
+        DetachedInstanceError the moment the dialog touched it.
+        """
+        from sqlalchemy.orm import selectinload
+
+        from app.db.models import Account
+
         with self.ctx.read_session() as db:
-            from app.db.models import Account
-            return db.get(Account, ident)
+            return db.get(
+                Account,
+                ident,
+                options=[
+                    selectinload(Account.tafsili_rules),
+                    selectinload(Account.allowed_currencies),
+                    selectinload(Account.parent),
+                ],
+            )
 
     def _menu(self, pos) -> None:
         menu = QMenu(self)

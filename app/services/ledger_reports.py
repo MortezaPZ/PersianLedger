@@ -6,7 +6,7 @@ never added together, so no exchange rate is needed and none exists.
 from __future__ import annotations
 
 import datetime as _dt
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
 from sqlalchemy import Select, func, select
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Account, AccountGroup, Currency, Document, DocumentLine, Tafsili
 from app.domain import money
-from app.domain.enums import DOCUMENT_TYPE_FA, DocumentStatus, nature_carries_opening
+from app.domain.enums import ACCOUNT_TYPE_FA, DOCUMENT_TYPE_FA, AccountType, DocumentStatus, nature_carries_opening
 from app.services.report_service import CurrencyColumn, StatementFilter, StatementResult, _apply_scope, account_statement
 
 ZERO = Decimal(0)
@@ -444,6 +444,80 @@ def browse_accounts(session: Session, flt: StatementFilter, level: str = LEVEL_G
     return result
 
 
+
+@dataclass
+class IncomeStatementLine:
+    code: str
+    name: str
+    amounts: dict[int, Decimal] = field(default_factory=dict)
+    is_total: bool = False
+
+    def amount(self, currency_id: int) -> Decimal:
+        return self.amounts.get(currency_id, ZERO)
+
+
+@dataclass
+class IncomeStatementResult:
+    title: str
+    subtitle: str
+    currencies: list[CurrencyColumn]
+    income: list[IncomeStatementLine]
+    expense: list[IncomeStatementLine]
+    income_total: dict[int, Decimal]
+    expense_total: dict[int, Decimal]
+    net: dict[int, Decimal]
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.income and not self.expense
+
+
+def income_statement(session: Session, flt: StatementFilter, level: str = LEVEL_MOIN) -> IncomeStatementResult:
+    """صورت سود و زیان: درآمد منهای هزینه، هر ارز در ستون خودش.
+
+    Only income and expense accounts take part, and only movement inside the
+    period -- a profit figure carries no opening balance by definition.
+    """
+    scoped = replace(flt, include_opening=False)
+    turnover = _aggregate(session, scoped, _group_column(level), flt.date_from, flt.date_to)
+    currencies = _currencies_from_maps(session, [turnover], flt)
+    labels = _names_for_level(session, level)
+    kinds = {a.id: a.account_type for a in session.execute(select(Account)).scalars()}
+
+    buckets: dict[AccountType, dict[int, IncomeStatementLine]] = {AccountType.INCOME: {}, AccountType.EXPENSE: {}}
+    totals: dict[AccountType, dict[int, Decimal]] = {AccountType.INCOME: {}, AccountType.EXPENSE: {}}
+    for (key, currency_id), (debit, credit) in sorted(turnover.items()):
+        kind = kinds.get(key)
+        if kind not in buckets:
+            continue
+        # Income lives on the credit side, expense on the debit side; each is
+        # shown as a positive figure so the statement reads like a statement.
+        value = (credit - debit) if kind == AccountType.INCOME else (debit - credit)
+        code, name = labels.get(key, ("", ""))
+        line = buckets[kind].setdefault(key, IncomeStatementLine(code, name))
+        line.amounts[currency_id] = line.amounts.get(currency_id, ZERO) + value
+        totals[kind][currency_id] = totals[kind].get(currency_id, ZERO) + value
+
+    income = sorted(buckets[AccountType.INCOME].values(), key=lambda r: r.code)
+    expense = sorted(buckets[AccountType.EXPENSE].values(), key=lambda r: r.code)
+    net = {
+        c.id: totals[AccountType.INCOME].get(c.id, ZERO) - totals[AccountType.EXPENSE].get(c.id, ZERO)
+        for c in currencies
+    }
+    subtitle = ""
+    if flt.date_from or flt.date_to:
+        subtitle = f"{flt.date_from or ''} تا {flt.date_to or ''}"
+    return IncomeStatementResult(
+        "صورت سود و زیان",
+        subtitle,
+        currencies,
+        income,
+        expense,
+        totals[AccountType.INCOME],
+        totals[AccountType.EXPENSE],
+        net,
+    )
+
 __all__ = (
     "LEVEL_KOL",
     "LEVEL_MOIN",
@@ -463,4 +537,7 @@ __all__ = (
     "LedgerResult",
     "general_ledger",
     "browse_accounts",
+    "IncomeStatementLine",
+    "IncomeStatementResult",
+    "income_statement",
 )

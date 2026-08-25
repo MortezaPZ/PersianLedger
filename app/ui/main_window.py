@@ -27,6 +27,7 @@ from app.ui.views.document_entry_view import DocumentEntryView
 from app.ui.views.document_list_view import DocumentListView
 from app.ui.views.journal_view import JournalView
 from app.ui.views.ledger_view import LedgerView
+from app.ui.views.income_statement_view import IncomeStatementView
 from app.ui.views.party_statement_view import PartyStatementView
 from app.ui.views.settings_view import SettingsView
 from app.ui.views.statement_view import StatementView
@@ -51,6 +52,7 @@ SECTIONS = (
             ("journal", "دفتر روزنامه", "Ctrl+6", JournalView),
             ("ledger", "دفتر کل و معین", "Ctrl+7", LedgerView),
             ("party", "صورت وضعیت اشخاص", "Ctrl+8", PartyStatementView),
+            ("income", "صورت سود و زیان", "Ctrl+Shift+2", IncomeStatementView),
         ),
     ),
     (

@@ -140,6 +140,7 @@ PAGE_ICONS = {
     "journal": "book",
     "ledger": "ledger",
     "party": "users",
+    "income": "balance",
     "accounts": "tree",
     "tafsili": "tag",
     "settings": "gear",

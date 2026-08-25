@@ -73,3 +73,26 @@ def journal_html(result) -> str:
             cells.extend([money.format_amount(debit, col.decimals, True), money.format_amount(credit, col.decimals, True)])
         rows.append(cells)
     return f"<html dir='rtl'><body><h2>{result.title}</h2><p>{result.subtitle}</p>{_table(headers, rows)}</body></html>"
+
+
+def income_statement_html(result) -> str:
+    headers = ["کد", "عنوان"] + [col.code for col in result.currencies]
+
+    def line_cells(line):
+        cells = [line.code, line.name]
+        for col in result.currencies:
+            cells.append(money.format_amount(line.amount(col.id), col.decimals, True))
+        return cells
+
+    def totals_cells(label, amounts):
+        cells = ["", label]
+        for col in result.currencies:
+            cells.append(money.format_amount(amounts.get(col.id, 0), col.decimals, True))
+        return cells
+
+    rows = [line_cells(ln) for ln in result.income]
+    rows.append(totals_cells("جمع درآمدها", result.income_total))
+    rows.extend(line_cells(ln) for ln in result.expense)
+    rows.append(totals_cells("جمع هزینه‌ها", result.expense_total))
+    rows.append(totals_cells("سود (زیان) خالص", result.net))
+    return f"<html dir='rtl'><body><h2>{result.title}</h2><p>{result.subtitle}</p>{_table(headers, rows)}</body></html>"

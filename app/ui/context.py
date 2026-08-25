@@ -47,6 +47,24 @@ class AppContext(QObject):
         finally:
             db.close()
 
+    def resync_user(self) -> None:
+        """Re-point the signed-in user at the current database.
+
+        A restored file may hold different user rows, so the id kept in memory
+        is matched again by username and dropped if that account is gone.
+        """
+        from app.services import auth_service
+
+        with self.read_session() as db:
+            if self.username:
+                user = next((u for u in auth_service.list_users(db) if u.username == self.username), None)
+                if user is not None:
+                    self.user_id = user.id
+                    self.display_name = user.display_name
+                    self.is_admin = user.is_admin
+                    return
+            self.user_id = auth_service.valid_user_id(db, self.user_id)
+
     @property
     def refdata(self) -> RefData:
         if self._refdata is None:
