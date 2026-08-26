@@ -64,6 +64,9 @@ def combo_with_picker(combo, title: str = "انتخاب") -> QWidget:
     row.setContentsMargins(0, 0, 0, 0)
     row.setSpacing(4)
     btn = QPushButton("…")
+    # Narrow button: the default horizontal padding would squeeze the ellipsis
+    # down to a single dot.
+    btn.setObjectName("PickerButton")
     btn.setFixedWidth(36)
     btn.setToolTip(title)
 

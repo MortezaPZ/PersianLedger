@@ -16,7 +16,7 @@ COL_NO, COL_ACCOUNT, COL_T1, COL_T2, COL_CURRENCY, COL_DEBIT, COL_CREDIT, COL_DE
 HEADERS = ("ردیف", "سرفصل", "تفصیلی ۱", "تفصیلی ۲", "ارز", "بدهکار", "بستانکار", "شرح")
 PICKER_COLUMNS = {COL_ACCOUNT, COL_T1, COL_T2, COL_CURRENCY}
 NEW_TAFSILI = -1
-NEW_TAFSILI_LABEL = "➕  تعریف تفصیلی جدید…"
+NEW_TAFSILI_LABEL = "+  تعریف تفصیلی جدید…"
 
 
 @dataclass

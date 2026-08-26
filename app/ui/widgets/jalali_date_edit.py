@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from app.domain import jalali
 from app.domain.jalali import JalaliError
 from app.domain.money import to_persian_digits
+from app.ui import icons, theme
 
 
 class JalaliCalendarPopup(QWidget):
@@ -113,7 +114,12 @@ class JalaliDateEdit(QWidget):
         self.edit.editingFinished.connect(self._normalize)
         today = QPushButton("امروز")
         today.clicked.connect(self.set_today)
-        cal = QPushButton("📅")
+        # A drawn icon, not an emoji: the bundled Persian font has no emoji
+        # glyph, so "📅" showed up as an empty box.
+        cal = QPushButton()
+        cal.setIcon(icons.icon("calendar", theme.current_palette().text_muted))
+        cal.setIconSize(QSize(16, 16))
+        cal.setFixedWidth(34)
         cal.setToolTip("انتخاب از تقویم")
         cal.clicked.connect(self._open_calendar)
         layout.addWidget(self.edit, 1)

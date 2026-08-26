@@ -115,7 +115,25 @@ def _chart(path: QPainterPath) -> None:
     _polyline(path, [(16.5, 19.5), (16.5, 11)])
 
 
+def _calendar(path: QPainterPath) -> None:
+    _rounded_rect(path, 3.5, 5, 17, 15.5, 2.5)
+    _polyline(path, [(3.5, 9.5), (20.5, 9.5)])
+    _polyline(path, [(8, 3), (8, 6.5)])
+    _polyline(path, [(16, 3), (16, 6.5)])
+    for x in (8, 12, 16):
+        path.addEllipse(QPointF(x, 13.5), 0.9, 0.9)
+    for x in (8, 12):
+        path.addEllipse(QPointF(x, 17), 0.9, 0.9)
+
+
+def _plus(path: QPainterPath) -> None:
+    _polyline(path, [(12, 5.5), (12, 18.5)])
+    _polyline(path, [(5.5, 12), (18.5, 12)])
+
+
 _SHAPES = {
+    "calendar": _calendar,
+    "plus": _plus,
     "document": _document,
     "list": _list,
     "folder": _folder,
@@ -220,4 +238,29 @@ def write_checkmark(path, color: str = "#ffffff", size: int = 14) -> str:
     painter.end()
     pix.save(str(path), "PNG")
     # QSS wants forward slashes even on Windows.
+    return str(path).replace("\\", "/")
+
+
+def write_chevron(path, color: str = "#64748b", size: int = 12) -> str:
+    """Render the combo-box arrow to *path* and return it as a QSS-ready url.
+
+    Styling ``QComboBox::drop-down`` makes Qt stop drawing its native arrow, so
+    it degrades to a dot unless an explicit image is supplied.
+    """
+    edge = size * 2
+    pix = QPixmap(edge, edge)
+    pix.fill(Qt.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    painter.scale(edge / _GRID, edge / _GRID)
+    pen = QPen(QColor(color))
+    pen.setWidthF(2.2)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    painter.setPen(pen)
+    path_ = QPainterPath()
+    _polyline(path_, [(6, 9.5), (12, 15.5), (18, 9.5)])
+    painter.drawPath(path_)
+    painter.end()
+    pix.save(str(path), "PNG")
     return str(path).replace("\\", "/")

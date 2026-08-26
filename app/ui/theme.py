@@ -19,29 +19,34 @@ def palette(dark: bool = False) -> palette_module.Palette:
     return palette_module.get(dark)
 
 
-def _checkmark_url(pal: palette_module.Palette) -> str:
-    """Path to the tick glyph, regenerated per theme.
+def _glyph_url(name: str, pal: palette_module.Palette, writer, colour: str) -> str:
+    """Path to a style-sheet glyph, regenerated per theme.
 
-    Qt can only pull style-sheet images from a URL, so it has to be a real file.
-    A read-only install directory must not break theming, hence the temp-dir
-    fallback and the broad except: a missing tick is cosmetic, a crash is not.
+    Qt can only pull style-sheet images from a URL, so each has to be a real
+    file.  A read-only install directory must not break theming, hence the
+    temp-dir fallback and the broad except: a missing glyph is cosmetic, a
+    crash is not.
     """
     try:
         from app import paths
 
-        target = paths.config_dir() / f"checkmark-{pal.name}.png"
+        target = paths.config_dir() / f"{name}-{pal.name}.png"
     except Exception:
-        target = Path(tempfile.gettempdir()) / f"pl-checkmark-{pal.name}.png"
+        target = Path(tempfile.gettempdir()) / f"pl-{name}-{pal.name}.png"
     try:
-        return icons.write_checkmark(target, pal.text_on_brand)
+        return writer(target, colour)
     except Exception:
-        log.warning("could not write the checkbox tick to %s", target, exc_info=True)
+        log.warning("could not write the %s glyph to %s", name, target, exc_info=True)
         return ""
 
 
 def stylesheet(dark: bool = False) -> str:
     pal = palette_module.get(dark)
-    return stylesheet_module.build(pal, _checkmark_url(pal))
+    return stylesheet_module.build(
+        pal,
+        checkmark=_glyph_url("checkmark", pal, icons.write_checkmark, pal.text_on_brand),
+        chevron=_glyph_url("chevron", pal, icons.write_chevron, pal.text_muted),
+    )
 
 
 def current_palette(app: QApplication | None = None) -> palette_module.Palette:

@@ -163,6 +163,13 @@ QComboBox::drop-down {{
     border: none;
     background: transparent;
 }}
+/* Styling drop-down stops Qt drawing its native arrow, which then degrades to
+   a dot, so the chevron is supplied as an image. */
+QComboBox::down-arrow, QDateEdit::down-arrow, QSpinBox::down-arrow {{
+    image: url({chevron});
+    width: 12px;
+    height: 12px;
+}}
 QComboBox QAbstractItemView {{
     background: {overlay};
     color: {text};
@@ -205,6 +212,13 @@ QPushButton[kind="primary"]:disabled {{
     background: {surface_muted};
     color: {text_faint};
     border-color: {line};
+}}
+
+#PickerButton {{
+    padding: 7px 2px;
+    font-size: 15px;
+    font-weight: bold;
+    color: {text_muted};
 }}
 
 QPushButton[kind="danger"] {{
@@ -416,5 +430,5 @@ QAbstractScrollArea::corner {{ background: transparent; border: none; }}
 """
 
 
-def build(palette: Palette, checkmark: str = "") -> str:
-    return _TEMPLATE.format(checkmark=checkmark, **palette.__dict__)
+def build(palette: Palette, checkmark: str = "", chevron: str = "") -> str:
+    return _TEMPLATE.format(checkmark=checkmark, chevron=chevron, **palette.__dict__)
