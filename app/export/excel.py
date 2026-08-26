@@ -75,12 +75,12 @@ def export_trial_balance(path: Path, result) -> None:
         4: ["گردش بد", "گردش بس", "مانده بد", "مانده بس"],
         6: ["افتتاحیه بد", "افتتاحیه بس", "گردش بد", "گردش بس", "مانده بد", "مانده بس"],
     }[result.columns]
-    headers = ["کد", "عنوان"]
+    headers = ["کد", "عنوان", "شرح"]
     for col in result.currencies:
         headers.extend([f"{col.code} {label}" for label in labels])
     _write_header(ws, 1, headers)
     for r, row in enumerate(result.rows, start=2):
-        values = [row.code, row.name]
+        values = [row.code, row.name, row.description]
         for col in result.currencies:
             for offset in range(result.columns):
                 values.append(row.cell(result.columns, offset, col.id))

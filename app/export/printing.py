@@ -52,12 +52,12 @@ def trial_balance_html(result) -> str:
         4: ["گردش بد", "گردش بس", "مانده بد", "مانده بس"],
         6: ["افتتاحیه بد", "افتتاحیه بس", "گردش بد", "گردش بس", "مانده بد", "مانده بس"],
     }[result.columns]
-    headers = ["کد", "عنوان"]
+    headers = ["کد", "عنوان", "شرح"]
     for col in result.currencies:
         headers.extend([f"{col.code} {label}" for label in labels])
     rows = []
     for row in result.rows:
-        cells = [row.code, row.name]
+        cells = [row.code, row.name, row.description]
         for col in result.currencies:
             for offset in range(result.columns):
                 cells.append(money.format_amount(row.cell(result.columns, offset, col.id), col.decimals, True))

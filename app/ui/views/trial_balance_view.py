@@ -27,10 +27,13 @@ class TrialBalanceModel(QAbstractTableModel):
         if not self.result:
             return []
         labels = {2: ["مانده بد", "مانده بس"], 4: ["گردش بد", "گردش بس", "مانده بد", "مانده بس"], 6: ["افتتاحیه بد", "افتتاحیه بس", "گردش بد", "گردش بس", "مانده بد", "مانده بس"]}[self.result.columns]
-        headers = ["کد", "عنوان"]
+        headers = ["کد", "عنوان", "شرح"]
         for col in self.result.currencies:
             headers.extend([f"{col.code}\n{label}" for label in labels])
         return headers
+
+    # Fixed columns before the per-currency figures start.
+    LEAD_COLUMNS = 3
 
     def rowCount(self, parent=None) -> int:
         return 0 if not self.result else len(self.result.rows)
@@ -49,6 +52,8 @@ class TrialBalanceModel(QAbstractTableModel):
         row = self.result.rows[index.row()]
         if role == Qt.BackgroundRole and row.kind == "total":
             return QBrush(QColor(theme.current_palette().subtotal_row))
+        if role == Qt.ToolTipRole and index.column() == 2:
+            return row.description  # full text when the column is capped
         if role == Qt.TextAlignmentRole:
             return int(Qt.AlignRight | Qt.AlignVCenter)
         if role != Qt.DisplayRole:
@@ -57,8 +62,10 @@ class TrialBalanceModel(QAbstractTableModel):
             return row.code
         if index.column() == 1:
             return row.name
-        offset = (index.column() - 2) % self.result.columns
-        currency_index = (index.column() - 2) // self.result.columns
+        if index.column() == 2:
+            return row.description
+        offset = (index.column() - self.LEAD_COLUMNS) % self.result.columns
+        currency_index = (index.column() - self.LEAD_COLUMNS) // self.result.columns
         col = self.result.currencies[currency_index]
         value = row.cell(self.result.columns, offset, col.id)
         return money.format_amount(value, col.decimals) if value else ""

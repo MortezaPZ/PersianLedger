@@ -97,6 +97,51 @@ def _aggregate(
     return result
 
 
+DESCRIPTION_LIMIT = 120
+
+
+def _descriptions(
+    session: Session,
+    flt: StatementFilter,
+    group_column,
+    date_from: _dt.date | None,
+    date_to: _dt.date | None,
+    keep_null_key: bool = False,
+) -> dict[int, str]:
+    """{group_key: joined line descriptions} over the same window as _aggregate.
+
+    A trial-balance row sums many lines, so it has no single description; the
+    distinct ones are joined and capped rather than inventing one.
+    """
+    stmt = select(group_column, DocumentLine.description)
+    if group_column in (Account.parent_id, Account.group_id):
+        stmt = stmt.join(Account, DocumentLine.account_id == Account.id)
+    stmt = _apply_scope(stmt, flt)
+    if date_from:
+        stmt = stmt.where(Document.date_g >= date_from)
+    if date_to:
+        stmt = stmt.where(Document.date_g <= date_to)
+
+    seen: dict[int, list[str]] = {}
+    for key, text in session.execute(stmt):
+        text = (text or "").strip()
+        if not text:
+            continue
+        if key is None:
+            if not keep_null_key:
+                continue
+            key = NO_TAFSILI
+        bucket = seen.setdefault(int(key), [])
+        if text not in bucket:
+            bucket.append(text)
+
+    out: dict[int, str] = {}
+    for key, items in seen.items():
+        joined = "، ".join(items)
+        out[key] = joined if len(joined) <= DESCRIPTION_LIMIT else joined[: DESCRIPTION_LIMIT - 1] + "…"
+    return out
+
+
 @dataclass
 class TrialBalanceRow:
     """One account, with a full set of figures for every currency column."""
@@ -105,6 +150,7 @@ class TrialBalanceRow:
     code: str
     name: str
     key: int | None = None
+    description: str = ""
     opening_debit: dict[int, Decimal] = field(default_factory=dict)
     opening_credit: dict[int, Decimal] = field(default_factory=dict)
     turnover_debit: dict[int, Decimal] = field(default_factory=dict)
@@ -181,11 +227,19 @@ def trial_balance(session: Session, flt: StatementFilter, level: str = LEVEL_MOI
     currencies = _currencies_from_maps(session, [opening, turnover], flt)
     names = _names_for_level(session, level)
     opening_ok = _opening_allowed_by_key(session, level)
+    notes = _descriptions(
+        session,
+        flt,
+        _group_column(level),
+        flt.date_from,
+        flt.date_to,
+        keep_null_key=level in TAFSILI_LEVELS,
+    )
     keys = {k for k, _c in opening} | {k for k, _c in turnover}
     rows: list[TrialBalanceRow] = []
     for key in sorted(keys, key=lambda k: names.get(k, ("", ""))[0]):
         code, name = names.get(key, (str(key), "بدون تفصیلی" if key == NO_TAFSILI else str(key)))
-        row = TrialBalanceRow(kind=level, code=code, name=name, key=key)
+        row = TrialBalanceRow(kind=level, code=code, name=name, key=key, description=notes.get(key, ""))
         allow_open = opening_ok.get(key, True)
         for col in currencies:
             od, oc = opening.get((key, col.id), (ZERO, ZERO)) if allow_open else (ZERO, ZERO)
