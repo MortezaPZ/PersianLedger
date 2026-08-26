@@ -189,6 +189,8 @@ class MainWindow(QMainWindow):
         self._refresh_status()
 
     def _refresh_status(self) -> None:
+        # A bare day/month typed into a date box belongs to the working year.
+        self.ctx.sync_date_default_year()
         self.year_label.setText(f"سال مالی {self.ctx.fiscal_year_title}")
         self.path_label.setText(self.ctx.config.describe())
 

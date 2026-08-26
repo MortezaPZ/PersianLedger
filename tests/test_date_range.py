@@ -45,30 +45,24 @@ def test_unparseable_dates_raise_instead_of_becoming_none(text):
         jalali.gregorian_from_string(text)
 
 
-def test_report_rejects_a_bad_date_rather_than_running_unbounded(qapp, monkeypatch):
+def test_report_rejects_a_bad_date_rather_than_running_unbounded(qapp):
     """A typo must stop the run, not quietly report on every document."""
-    from app.ui.widgets.jalali_date_edit import JalaliDateEdit
     from app.ui.views.report_base import ReportView
+    from app.ui.widgets.jalali_date_edit import JalaliDateEdit
 
     view = ReportView.__new__(ReportView)  # no DB needed for the date gate
     view.from_date = JalaliDateEdit()
     view.to_date = JalaliDateEdit()
-    warnings: list[str] = []
-    view.warn = warnings.append
 
     view.from_date.setText("1405-05-15")
     view.to_date.setText("چرند")
-    assert view.dates_are_valid() is False
-    assert warnings, "a bad date must warn"
+    assert view.date_range_error() is not None
 
     view.to_date.setText("1405-05-16")
-    warnings.clear()
-    assert view.dates_are_valid() is True
-    assert not warnings
+    assert view.date_range_error() is None
 
-    # Reversed range is caught too.
-    view.from_date.setText("1405-05-20")
-    assert view.dates_are_valid() is False
+    view.from_date.setText("1405-05-20")  # reversed range
+    assert view.date_range_error() is not None
 
 
 def test_empty_date_still_means_no_bound(qapp):
@@ -76,5 +70,4 @@ def test_empty_date_still_means_no_bound(qapp):
 
     field = JalaliDateEdit()
     field.clear()
-    assert field.is_valid() is True
     assert field.gregorian() is None

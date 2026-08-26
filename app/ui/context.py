@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal
 
 from app.bootstrap import Startup
 from app.db import engine as engine_module
+from app.domain import jalali
 from app.services import master_data
 from app.ui.refdata import RefData
 
@@ -103,3 +104,8 @@ class AppContext(QObject):
             if year.id == self.fiscal_year_id:
                 return year.title
         return ""
+
+    def sync_date_default_year(self) -> None:
+        """Teach the date parser which year a bare day/month belongs to."""
+        title = self.fiscal_year_title
+        jalali.set_default_year(int(title) if title.isdigit() else None)

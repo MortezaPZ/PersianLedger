@@ -9,6 +9,24 @@ import jdatetime
 from app.domain.money import to_latin_digits, to_persian_digits
 
 _J_PATTERN = re.compile(r"^\s*(\d{4})\s*[-/._]\s*(\d{1,2})\s*[-/._]\s*(\d{1,2})\s*$")
+# Accountants routinely type just day/month ("۱۵/۵") and expect the working
+# year.  Without this the value failed to parse, the date bound was dropped,
+# and the report quietly covered the whole ledger instead of the range asked
+# for.  Order is day/month, matching how the full form reads right to left.
+_J_SHORT_PATTERN = re.compile(r"^\s*(\d{1,2})\s*[-/._]\s*(\d{1,2})\s*$")
+
+# Set from the active fiscal year so a bare day/month lands in the year being
+# worked on rather than whatever today happens to be.
+_default_year: int | None = None
+
+
+def set_default_year(jyear: int | None) -> None:
+    global _default_year
+    _default_year = jyear
+
+
+def default_year() -> int:
+    return _default_year or today_jalali().year
 
 MONTH_NAMES = (
     "فروردین",
@@ -67,9 +85,14 @@ def to_gregorian(jalali: jdatetime.date) -> _dt.date:
 def parse_jalali(text: str) -> jdatetime.date:
     raw = to_latin_digits(text or "")
     match = _J_PATTERN.match(raw)
-    if not match:
-        raise JalaliError("تاریخ شمسی را به صورت ۱۴۰۴-۰۵-۲۴ وارد کنید.")
-    year, month, day = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    if match:
+        year, month, day = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    else:
+        short = _J_SHORT_PATTERN.match(raw)
+        if not short:
+            raise JalaliError("تاریخ شمسی را به صورت ۱۴۰۴-۰۵-۲۴ وارد کنید.")
+        year = default_year()
+        day, month = int(short.group(1)), int(short.group(2))
     try:
         return jdatetime.date(year, month, day)
     except ValueError as exc:
