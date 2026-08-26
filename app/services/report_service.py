@@ -95,9 +95,25 @@ def _apply_scope(stmt: Select, flt: StatementFilter) -> Select:
         stmt = stmt.where(DocumentLine.currency_id.in_(flt.currency_ids))
     if flt.group_ids:
         members = select(TafsiliGroupMember.tafsili_id).where(TafsiliGroupMember.group_id.in_(flt.group_ids))
-        stmt = stmt.where(
-            or_(DocumentLine.tafsili1_id.in_(members), DocumentLine.tafsili2_id.in_(members))
-        )
+        chosen = [i for i in (flt.tafsili_any_id, flt.tafsili_id) if i] or list(flt.tafsili_ids or [])
+        if chosen:
+            # Reporting a chosen tafsili "within group G" asks whether *that*
+            # tafsili is in G.  Matching any tafsili on the line let the second
+            # slot satisfy the filter, so a project line also tagged with a
+            # person came back under the person's group and the filter looked
+            # like it did nothing.
+            stmt = stmt.where(
+                select(TafsiliGroupMember.tafsili_id)
+                .where(
+                    TafsiliGroupMember.tafsili_id.in_(chosen),
+                    TafsiliGroupMember.group_id.in_(flt.group_ids),
+                )
+                .exists()
+            )
+        else:
+            stmt = stmt.where(
+                or_(DocumentLine.tafsili1_id.in_(members), DocumentLine.tafsili2_id.in_(members))
+            )
     if flt.exclude_doc_types:
         stmt = stmt.where(Document.doc_type.notin_(flt.exclude_doc_types))
     return stmt
