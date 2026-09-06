@@ -40,3 +40,13 @@ python -m venv .venv
 
 اسناد قطعی برای غیرمدیر تغییرناپذیرند؛ مدیر می‌تواند با ردپای کامل در سوابق، سند را به پیش‌نویس برگرداند یا حذف کند.
 
+رمز PostgreSQL در `keyring` ویندوز نگه داشته می‌شود؛ اگر keyring در دسترس نباشد در ini ذخیره می‌شود.
+
+### حالت سرور
+
+چند کاربر می‌توانند به یک PostgreSQL روی شبکهٔ دفتر وصل شوند. راهنما: `docs/deploy-server-fa.md`.
+
+| محل | SQLite | PostgreSQL |
+|---|---|---|
+| دفتر | `.localdata/ledger.sqlite3` یا `data/ledger.sqlite3` | سرور |
+| پیوست | داخل فایل دیتابیس + کش `attachments-cache` | همان |

@@ -17,9 +17,17 @@ def _package_binaries(package, dest: str):
     return collected
 
 
-# The venv may contain a copied (non-pip) PySide6/shiboken6 tree. PyInstaller's
-# analysis does not import shiboken6.Shiboken unless we collect the .pyd explicitly.
-extra_binaries = _package_binaries(shiboken6, "shiboken6") + _package_binaries(PySide6, "PySide6")
+from PyInstaller.utils.hooks import collect_all
+
+psycopg_datas, psycopg_bins, psycopg_hidden = collect_all("psycopg")
+psycopg_b_datas, psycopg_b_bins, psycopg_b_hidden = collect_all("psycopg_binary")
+
+extra_binaries = (
+    _package_binaries(shiboken6, "shiboken6")
+    + _package_binaries(PySide6, "PySide6")
+    + list(psycopg_bins)
+    + list(psycopg_b_bins)
+)
 
 a = Analysis(
     [str(ROOT / "run.py")],
@@ -31,14 +39,23 @@ a = Analysis(
         (str(ROOT / "app" / "ui" / "resources" / "fonts"), "app/ui/resources/fonts"),
         (str(ROOT / "migrations"), "migrations"),
         (str(ROOT / "docs"), "docs"),
+        (str(ROOT / "deploy"), "deploy"),
         (str(ROOT / "portable.txt"), "."),
-    ],
+    ]
+    + list(psycopg_datas)
+    + list(psycopg_b_datas),
     hiddenimports=[
         "app.db.models",
         "app.ui.main_window",
         "app.ui.icons",
         "app.ui.palette",
         "app.ui.stylesheet",
+        "app.domain.permissions",
+        "psycopg",
+        "psycopg_binary",
+        "psycopg.pq",
+        "keyring",
+        "keyring.backends.Windows",
         "shiboken6",
         "shiboken6.Shiboken",
         "PySide6.QtCore",
@@ -46,7 +63,9 @@ a = Analysis(
         "PySide6.QtWidgets",
         "PySide6.QtNetwork",
         "PySide6.QtPrintSupport",
-    ],
+    ]
+    + list(psycopg_hidden)
+    + list(psycopg_b_hidden),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

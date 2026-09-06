@@ -154,9 +154,7 @@ docs/            architecture, user guide
 4. **Accounts with history cannot be deleted or renumbered** — only deactivated.
 5. **Numbering is gapless.** Numbers are taken from a locked `number_sequences` row at
    posting time, never `MAX(number)+1`, and never assigned to a draft.
-6. **PostgreSQL-ready.** No SQLite-specific SQL, one short transaction per use-case,
-   `row_version` optimistic locking on every mutable row. Switching backends is a change
-   to `config.ini`.
+6. **PostgreSQL-ready.** SQLAlchemy + Alembic on SQLite and PostgreSQL; `row_version` optimistic locking. Switching backends is a change in connection settings / `config.ini`. Password for PostgreSQL is stored in the OS keyring when possible.
 
 ---
 
