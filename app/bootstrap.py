@@ -35,4 +35,11 @@ def start(cfg: AppConfig | None = None, with_demo: bool = False) -> Startup:
                 # The employer asks for this worked example in every round of
                 # feedback, so a plain install has to show it too -- not just --demo.
                 seed.seed_project_example(session)
+            from app.db.models import AttachmentBlob
+            from app.services import attachment_service
+            from sqlalchemy import func, select
+
+            empty_blobs = session.execute(select(func.count()).select_from(AttachmentBlob)).scalar_one() == 0
+            if empty_blobs:
+                attachment_service.import_legacy_files(session, cfg)
     return Startup(cfg, engine, result, seeded)

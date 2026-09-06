@@ -73,7 +73,8 @@ class AttachmentPanel(QWidget):
         att = self._current()
         if not att:
             return
-        path = attachment_service.absolute_path(self.ctx.config, att)
+        with self.ctx.read_session() as db:
+            path = attachment_service.materialize(db, self.ctx.config, db.merge(att))
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def save_copy(self) -> None:
@@ -82,7 +83,8 @@ class AttachmentPanel(QWidget):
             return
         dest, _ = QFileDialog.getSaveFileName(self, "ذخیره نسخه", att.original_name)
         if dest:
-            attachment_service.export_copy(self.ctx.config, att, Path(dest))
+            with self.ctx.read_session() as db:
+                attachment_service.export_copy(db, self.ctx.config, db.merge(att), Path(dest))
 
     def remove_selected(self) -> None:
         att = self._current()

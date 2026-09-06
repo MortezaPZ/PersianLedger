@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
@@ -331,6 +332,14 @@ class DocumentLine(Base):
     tafsili1: Mapped[Tafsili | None] = relationship(foreign_keys=[tafsili1_id])
     tafsili2: Mapped[Tafsili | None] = relationship(foreign_keys=[tafsili2_id])
     currency: Mapped[Currency] = relationship()
+
+
+class AttachmentBlob(Base):
+    __tablename__ = "attachment_blobs"
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
 class DocumentAttachment(Base):
