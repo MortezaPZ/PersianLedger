@@ -2,11 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import create_engine, event, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import select
 
-from app.db.base import Base
-from app.db.engine import set_session_factory
 from app.db.models import Account, Currency, Document, Tafsili
 from app.db import seed
 from app.domain.enums import AccountNature, DocumentStatus, DocumentType
@@ -14,23 +11,8 @@ from app.services import document_service, ledger_reports, master_data
 from app.services.report_service import StatementFilter, account_statement, party_statement
 
 
-def _session() -> Session:
-    engine = create_engine("sqlite:///:memory:", future=True)
-
-    @event.listens_for(engine, "connect")
-    def _pragma(dbapi_connection, _record) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
-    set_session_factory(factory, engine)
-    return factory()
-
-
-def test_project_a_scenario():
-    session = _session()
+def test_project_a_scenario(db_session):
+    session = db_session
     seed.seed_base(session)
     seed.seed_demo(session)
     seed.seed_project_example(session)
@@ -118,8 +100,8 @@ def test_project_a_scenario():
         assert len(doc.lines) >= 2
 
 
-def test_atomic_save_keeps_number_and_lines_together():
-    session = _session()
+def test_atomic_save_keeps_number_and_lines_together(db_session):
+    session = db_session
     seed.seed_base(session)
     year = master_data.current_fiscal_year(session)
     cash = session.execute(select(Account).where(Account.code == "1001")).scalar_one()
@@ -145,12 +127,12 @@ def test_atomic_save_keeps_number_and_lines_together():
     assert loaded.lines[0].description == "بد"
 
 
-def test_statement_respects_date_to():
+def test_statement_respects_date_to(db_session):
     import datetime as dt
 
     from app.domain import jalali
 
-    session = _session()
+    session = db_session
     seed.seed_base(session)
     year = master_data.current_fiscal_year(session)
     cash = session.execute(select(Account).where(Account.code == "1001")).scalar_one()
@@ -195,8 +177,8 @@ def test_statement_respects_date_to():
     assert result.closing[irr.id] == Decimal("5")
 
 
-def test_browse_hides_opening_docs_when_excluded():
-    session = _session()
+def test_browse_hides_opening_docs_when_excluded(db_session):
+    session = db_session
     seed.seed_base(session)
     seed.seed_demo(session)
     hidden = ledger_reports.browse_accounts(
@@ -218,10 +200,10 @@ def test_browse_hides_opening_docs_when_excluded():
     assert sum(cash_shown.turnover_debit.values()) > sum(cash_hidden.turnover_debit.values())
 
 
-def test_period_nature_clears_opening_in_trial():
+def test_period_nature_clears_opening_in_trial(db_session):
     from app.domain import jalali
 
-    session = _session()
+    session = db_session
     seed.seed_base(session)
     seed.seed_demo(session)
     cash = session.execute(select(Account).where(Account.code == "1001")).scalar_one()
@@ -240,8 +222,8 @@ def test_period_nature_clears_opening_in_trial():
     assert sum(row.opening_credit.values()) == 0
 
 
-def test_delete_draft_releases_last_number():
-    session = _session()
+def test_delete_draft_releases_last_number(db_session):
+    session = db_session
     seed.seed_base(session)
     year = master_data.current_fiscal_year(session)
     cash = session.execute(select(Account).where(Account.code == "1001")).scalar_one()
@@ -266,8 +248,8 @@ def test_delete_draft_releases_last_number():
     assert document_service.next_number_preview(session, year) == number
 
 
-def test_create_currency_and_fiscal_year():
-    session = _session()
+def test_create_currency_and_fiscal_year(db_session):
+    session = db_session
     seed.seed_base(session)
     row = master_data.create_currency(session, code="XYZ", name="آزمایشی", decimals=2)
     assert row.code == "XYZ"
@@ -275,8 +257,8 @@ def test_create_currency_and_fiscal_year():
     assert year.title == "1399"
 
 
-def test_suggest_tafsili_code_follows_group():
-    session = _session()
+def test_suggest_tafsili_code_follows_group(db_session):
+    session = db_session
     seed.seed_base(session)
     group = next(g for g in master_data.tafsili_groups(session) if g.code == "30")
     code = master_data.suggest_tafsili_code(session, group.id)

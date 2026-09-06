@@ -10,7 +10,6 @@ from app.db import seed
 from app.domain.enums import AuditAction, DocumentStatus
 from app.domain.errors import ValidationError
 from app.services import document_service, master_data
-from tests.test_project_scenario import _session
 
 
 def _post(session, description: str = "آزمایش") -> Document:
@@ -32,8 +31,8 @@ def _post(session, description: str = "آزمایش") -> Document:
     return document_service.save_and_post(session, data)
 
 
-def test_unpost_then_post_keeps_number():
-    session = _session()
+def test_unpost_then_post_keeps_number(db_session):
+    session = db_session
     seed.seed_base(session)
     doc = _post(session)
     number = doc.number
@@ -48,8 +47,8 @@ def test_unpost_then_post_keeps_number():
     assert doc.status == DocumentStatus.POSTED
 
 
-def test_unpost_reversed_and_correction_target_raise():
-    session = _session()
+def test_unpost_reversed_and_correction_target_raise(db_session):
+    session = db_session
     seed.seed_base(session)
     original = _post(session, "اصلی")
     year = master_data.current_fiscal_year(session)
@@ -67,8 +66,8 @@ def test_unpost_reversed_and_correction_target_raise():
         document_service.unpost(session, other)
 
 
-def test_delete_posted_lines_and_number_release():
-    session = _session()
+def test_delete_posted_lines_and_number_release(db_session):
+    session = db_session
     seed.seed_base(session)
     first = _post(session, "اول")
     second = _post(session, "دوم")
@@ -88,8 +87,8 @@ def test_delete_posted_lines_and_number_release():
     assert document_service.next_number_preview(session, year) == 2
 
 
-def test_purge_fiscal_year_resets_numbering():
-    session = _session()
+def test_purge_fiscal_year_resets_numbering(db_session):
+    session = db_session
     seed.seed_base(session)
     _post(session, "۱")
     _post(session, "۲")
@@ -102,8 +101,8 @@ def test_purge_fiscal_year_resets_numbering():
     assert document_service.next_number_preview(session, year) == 1
 
 
-def test_closed_year_blocks_unpost_and_purge():
-    session = _session()
+def test_closed_year_blocks_unpost_and_purge(db_session):
+    session = db_session
     seed.seed_base(session)
     doc = _post(session)
     year = master_data.current_fiscal_year(session)

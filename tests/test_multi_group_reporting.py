@@ -6,34 +6,16 @@ its own.  This was reported fixed once and came back, so it is pinned here.
 """
 from __future__ import annotations
 
-from sqlalchemy import create_engine, event, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.db import seed
-from app.db.base import Base
-from app.db.engine import set_session_factory
 from app.db.models import Tafsili, TafsiliGroup
 from app.services import ledger_reports
 from app.services.report_service import StatementFilter, party_statement
 
 
-def _session() -> Session:
-    engine = create_engine("sqlite:///:memory:", future=True)
-
-    @event.listens_for(engine, "connect")
-    def _pragma(dbapi_connection, _record) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
-    set_session_factory(factory, engine)
-    return factory()
-
-
-def _seeded() -> tuple[Session, Tafsili]:
-    session = _session()
+def _seeded(session: Session) -> tuple[Session, Tafsili]:
     seed.seed_base(session)
     seed.seed_demo(session)
     seed.seed_project_example(session)
@@ -41,13 +23,13 @@ def _seeded() -> tuple[Session, Tafsili]:
     return session, project
 
 
-def test_project_belongs_to_more_than_one_group():
-    session, project = _seeded()
+def test_project_belongs_to_more_than_one_group(db_session):
+    session, project = _seeded(db_session)
     assert len(project.group_ids) >= 2, "the scenario needs a multi-group tafsili"
 
 
-def test_each_group_on_its_own_and_both_together_all_report():
-    session, project = _seeded()
+def test_each_group_on_its_own_and_both_together_all_report(db_session):
+    session, project = _seeded(db_session)
     groups = sorted(project.group_ids)
     first, second = groups[0], groups[1]
 
@@ -64,9 +46,9 @@ def test_each_group_on_its_own_and_both_together_all_report():
         assert not result.is_empty, f"«پروژه A» reported nothing for {label}"
 
 
-def test_filtering_by_an_unrelated_group_excludes_the_project():
+def test_filtering_by_an_unrelated_group_excludes_the_project(db_session):
     """The filter must actually narrow, not just always pass."""
-    session, project = _seeded()
+    session, project = _seeded(db_session)
     others = [
         g.id
         for g in session.execute(select(TafsiliGroup)).scalars()
@@ -81,8 +63,8 @@ def test_filtering_by_an_unrelated_group_excludes_the_project():
     assert result.is_empty
 
 
-def test_trial_balance_group_filter_changes_the_rows():
-    session, project = _seeded()
+def test_trial_balance_group_filter_changes_the_rows(db_session):
+    session, project = _seeded(db_session)
     groups = sorted(project.group_ids)
 
     def names(ids):
@@ -100,10 +82,10 @@ def test_trial_balance_group_filter_changes_the_rows():
     assert single != unfiltered, "the group filter had no effect"
 
 
-def test_trial_balance_carries_line_descriptions():
+def test_trial_balance_carries_line_descriptions(db_session):
     """The employer asked for شرح in the trial balance; rows aggregate many
     lines, so the distinct descriptions are joined rather than invented."""
-    session, _project = _seeded()
+    session, _project = _seeded(db_session)
     result = ledger_reports.trial_balance(
         session,
         StatementFilter(include_drafts=False),
