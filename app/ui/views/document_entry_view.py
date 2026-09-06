@@ -51,6 +51,7 @@ class DocumentEntryView(BaseView):
         super().__init__(context, parent)
         self.document = None
         self.document_id: int | None = None
+        self.document_row_version: int | None = None
         card = QFrame()
         card.setObjectName("Card")
         grid = QGridLayout(card)
@@ -178,13 +179,16 @@ class DocumentEntryView(BaseView):
         """
         self.document = doc
         self.document_id = doc.id if doc is not None else None
+        self.document_row_version = getattr(doc, "row_version", None) if doc is not None else None
 
     def save_draft(self) -> None:
         try:
             with self.ctx.session() as db:
                 data = self._input()
                 current = document_service.load(db, self.document_id) if self.document_id else None
-                doc = document_service.save_draft(db, data, current, self.ctx.user_id)
+                doc = document_service.save_draft(
+                    db, data, current, self.ctx.user_id, expected_row_version=self.document_row_version
+                )
                 db.refresh(doc)
                 list(doc.attachments)
                 number = doc.number
@@ -205,7 +209,9 @@ class DocumentEntryView(BaseView):
             with self.ctx.session() as db:
                 data = self._input()
                 current = document_service.load(db, self.document_id) if self.document_id else None
-                doc = document_service.save_and_post(db, data, current, self.ctx.user_id)
+                doc = document_service.save_and_post(
+                    db, data, current, self.ctx.user_id, expected_row_version=self.document_row_version
+                )
                 master_data.lock_used_currencies(db)
                 list(doc.attachments)
                 number = doc.number

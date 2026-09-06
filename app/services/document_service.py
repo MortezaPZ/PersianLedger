@@ -25,7 +25,7 @@ from app.db.models import (
 from app.db.types import utcnow
 from app.domain import money
 from app.domain.enums import AuditAction, DocumentStatus, DocumentType
-from app.domain.errors import ImmutableDocumentError, UnbalancedDocumentError, ValidationError
+from app.domain.errors import ConcurrencyError, ImmutableDocumentError, UnbalancedDocumentError, ValidationError
 from app.domain.permissions import Perm
 from app.repositories import sequences
 from app.services import audit, auth_service
@@ -235,6 +235,7 @@ def save_draft(
     data: DocumentInput,
     document: Document | None = None,
     user_id: int | None = None,
+    expected_row_version: int | None = None,
 ) -> Document:
     """Create or update a draft. Posted documents are refused outright.
 
@@ -242,6 +243,8 @@ def save_draft(
     The caller commits; on any error the caller rolls back, including the number.
     """
     auth_service.require(session, user_id, Perm.DOC_DRAFT)
+    if document is not None and expected_row_version is not None and document.row_version != expected_row_version:
+        raise ConcurrencyError("سند")
     if document is not None and document.is_posted:
         raise ImmutableDocumentError(document.number or 0)
     creating = document is None
@@ -273,6 +276,9 @@ def save_draft(
 def post(session: Session, document: Document, user_id: int | None = None) -> Document:
     """Assign the sequential number and make the document permanent."""
     auth_service.require(session, user_id, Perm.DOC_POST)
+    locked = session.execute(select(Document).where(Document.id == document.id).with_for_update()).scalar_one_or_none()
+    if locked is not None:
+        document = locked
     if document.is_posted:
         raise ImmutableDocumentError(document.number or 0)
     data = DocumentInput(
@@ -316,9 +322,10 @@ def save_and_post(
     data: DocumentInput,
     document: Document | None = None,
     user_id: int | None = None,
+    expected_row_version: int | None = None,
 ) -> Document:
     validate(session, data)
-    document = save_draft(session, data, document, user_id)
+    document = save_draft(session, data, document, user_id, expected_row_version=expected_row_version)
     return post(session, document, user_id)
 
 

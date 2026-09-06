@@ -30,17 +30,14 @@ def ensure_scope(session: Session, scope: str) -> None:
 
 def next_value(session: Session, scope: str) -> int:
     ensure_scope(session, scope)
-    session.execute(
+    result = session.execute(
         update(NumberSequence)
         .where(NumberSequence.scope == scope)
-        .values(last_value=NumberSequence.last_value + 1),
+        .values(last_value=NumberSequence.last_value + 1)
+        .returning(NumberSequence.last_value),
         execution_options={"synchronize_session": False},
     )
-    return int(
-        session.execute(
-            select(NumberSequence.last_value).where(NumberSequence.scope == scope)
-        ).scalar_one()
-    )
+    return int(result.scalar_one())
 
 
 def peek_value(session: Session, scope: str) -> int:
