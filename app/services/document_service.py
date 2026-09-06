@@ -9,10 +9,19 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import Account, AccountTafsiliRule, Currency, Document, DocumentLine, FiscalYear, Tafsili
+from app.db.models import (
+    Account,
+    AccountTafsiliRule,
+    Currency,
+    Document,
+    DocumentLine,
+    FiscalYear,
+    NumberSequence,
+    Tafsili,
+)
 from app.domain import money
 from app.domain.enums import AuditAction, DocumentStatus, DocumentType
 from app.domain.errors import ImmutableDocumentError, UnbalancedDocumentError, ValidationError
@@ -440,6 +449,95 @@ def load(session: Session, document_id: int) -> Document | None:
     ).scalar_one_or_none()
 
 
+def _year_or_error(session: Session, document: Document) -> FiscalYear:
+    year = session.get(FiscalYear, document.fiscal_year_id)
+    if year is None:
+        raise ValidationError("سال مالی سند پیدا نشد.")
+    if year.is_closed:
+        raise ValidationError(f"سال مالی {year.title} بسته شده است.")
+    return year
+
+
+def unpost(session: Session, document: Document, user_id: int | None = None) -> Document:
+    if not document.is_posted:
+        raise ValidationError("این سند قطعی نیست.")
+    year = _year_or_error(session, document)
+    n = document.number or 0
+    if document.is_reversed:
+        raise ValidationError(f"سند شماره {n} برگشت خورده است؛ اول سند برگشتی آن را حذف کنید.")
+    referring = session.execute(
+        select(Document.id).where(
+            (Document.reverses_document_id == document.id)
+            | (Document.corrects_document_id == document.id)
+        )
+    ).first()
+    if referring:
+        raise ValidationError(f"سند شماره {n} توسط سند دیگری ارجاع شده است و قابل بازگردانی نیست.")
+    before = {"number": document.number, "posted_at": document.posted_at}
+    if document.reverses_document_id:
+        original = session.get(Document, document.reverses_document_id)
+        if original is not None:
+            original.is_reversed = False
+    document.status = DocumentStatus.DRAFT
+    document.posted_by_user_id = None
+    document.posted_at = None
+    session.flush()
+    audit.record(
+        session,
+        entity_type="Document",
+        action=AuditAction.UNPOST,
+        entity_id=document.id,
+        user_id=user_id,
+        before=before,
+    )
+    return document
+
+
+def delete_posted(session: Session, document: Document, user_id: int | None = None) -> None:
+    unpost(session, document, user_id)
+    before = {
+        "number": document.number,
+        "date_j": document.date_j,
+        "lines": len(document.lines),
+    }
+    audit.record(
+        session,
+        entity_type="Document",
+        action=AuditAction.DELETE_POSTED,
+        entity_id=document.id,
+        user_id=user_id,
+        before=before,
+    )
+    delete_draft(session, document, user_id)
+
+
+def purge_fiscal_year(session: Session, fiscal_year: FiscalYear, user_id: int | None = None) -> int:
+    if fiscal_year.is_closed:
+        raise ValidationError(f"سال مالی {fiscal_year.title} بسته شده است.")
+    count = session.execute(
+        select(Document.id).where(Document.fiscal_year_id == fiscal_year.id)
+    ).all()
+    n = len(count)
+    session.execute(delete(Document).where(Document.fiscal_year_id == fiscal_year.id))
+    scope = sequences.document_scope(fiscal_year.title)
+    sequences.ensure_scope(session, scope)
+    session.execute(
+        update(NumberSequence)
+        .where(NumberSequence.scope == scope)
+        .values(last_value=0),
+        execution_options={"synchronize_session": False},
+    )
+    audit.record(
+        session,
+        entity_type="FiscalYear",
+        action=AuditAction.PURGE,
+        entity_id=fiscal_year.id,
+        user_id=user_id,
+        before={"documents": n},
+    )
+    return n
+
+
 def next_number_preview(session: Session, fiscal_year: FiscalYear) -> int:
     return sequences.peek_value(session, sequences.document_scope(fiscal_year.title)) + 1
 
@@ -454,6 +552,9 @@ __all__ = (
     "post",
     "save_and_post",
     "delete_draft",
+    "unpost",
+    "delete_posted",
+    "purge_fiscal_year",
     "reverse",
     "create_correction_draft",
     "load",

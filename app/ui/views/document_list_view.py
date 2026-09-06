@@ -41,7 +41,16 @@ class DocumentListView(BaseView):
         rev = QPushButton("سند برگشتی"); rev.clicked.connect(self.reverse)
         corr = QPushButton("سند اصلاحی"); corr.clicked.connect(self.correct)
         delete = QPushButton("حذف پیش‌نویس"); delete.setProperty("kind", "danger"); delete.clicked.connect(self.delete_draft)
-        actions.addWidget(open_btn); actions.addWidget(rev); actions.addWidget(corr); actions.addWidget(delete); actions.addStretch()
+        actions.addWidget(open_btn); actions.addWidget(rev); actions.addWidget(corr); actions.addWidget(delete)
+        if self.ctx.is_admin:
+            unpost = QPushButton("بازگردانی به پیش‌نویس")
+            unpost.clicked.connect(self.unpost)
+            delete_posted = QPushButton("حذف سند قطعی")
+            delete_posted.setProperty("kind", "danger")
+            delete_posted.clicked.connect(self.delete_posted)
+            actions.addWidget(unpost)
+            actions.addWidget(delete_posted)
+        actions.addStretch()
         self.body.addLayout(actions)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["شماره", "تاریخ", "نوع", "شرح", "وضعیت", "ردیف‌ها"])
@@ -141,6 +150,44 @@ class DocumentListView(BaseView):
         try:
             with self.ctx.session() as db:
                 document_service.delete_draft(db, document_service.load(db, doc_id), self.ctx.user_id)
+            self.reload()
+        except LedgerError as exc:
+            self.warn(str(exc))
+
+    def unpost(self) -> None:
+        doc_id = self._id()
+        if not doc_id:
+            return
+        try:
+            with self.ctx.session() as db:
+                doc = document_service.load(db, doc_id)
+                n = doc.number if doc else ""
+            if not self.confirm(
+                f"سند شماره {n} به پیش‌نویس برمی‌گردد و از گزارش‌ها حذف می‌شود تا دوباره قطعی شود. ادامه می‌دهید؟"
+            ):
+                return
+            with self.ctx.session() as db:
+                document_service.unpost(db, document_service.load(db, doc_id), self.ctx.user_id)
+            self.inform("سند به پیش‌نویس بازگشت.")
+            self.reload()
+        except LedgerError as exc:
+            self.warn(str(exc))
+
+    def delete_posted(self) -> None:
+        doc_id = self._id()
+        if not doc_id:
+            return
+        try:
+            with self.ctx.session() as db:
+                doc = document_service.load(db, doc_id)
+                n = doc.number if doc else ""
+            if not self.confirm(
+                f"سند قطعی شماره {n} برای همیشه حذف می‌شود. این کار در سوابق تغییرات ثبت می‌شود. ادامه می‌دهید؟"
+            ):
+                return
+            with self.ctx.session() as db:
+                document_service.delete_posted(db, document_service.load(db, doc_id), self.ctx.user_id)
+            self.inform("سند حذف شد.")
             self.reload()
         except LedgerError as exc:
             self.warn(str(exc))

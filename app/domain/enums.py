@@ -49,6 +49,9 @@ class AuditAction(str, enum.Enum):
     DEACTIVATE = "DEACTIVATE"
     ACTIVATE = "ACTIVATE"
     LOGIN = "LOGIN"
+    UNPOST = "UNPOST"
+    DELETE_POSTED = "DELETE_POSTED"
+    PURGE = "PURGE"
 
 
 ACCOUNT_TYPE_FA = {
@@ -124,4 +127,7 @@ AUDIT_ACTION_FA = {
     AuditAction.DEACTIVATE: "غیرفعال کردن",
     AuditAction.ACTIVATE: "فعال کردن",
     AuditAction.LOGIN: "ورود",
+    AuditAction.UNPOST: "بازگردانی به پیش‌نویس",
+    AuditAction.DELETE_POSTED: "حذف سند قطعی",
+    AuditAction.PURGE: "پاک‌سازی اسناد",
 }

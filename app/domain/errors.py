@@ -34,3 +34,8 @@ class ConcurrencyError(LedgerError):
             f"این {entity} در همین فاصله توسط کاربر دیگری تغییر کرده است. "
             "لطفاً صفحه را تازه کنید و دوباره تلاش کنید."
         )
+
+
+class PermissionDeniedError(LedgerError):
+    def __init__(self, message: str = "شما اجازه انجام این عملیات را ندارید.") -> None:
+        super().__init__(message)

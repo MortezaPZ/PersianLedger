@@ -147,9 +147,10 @@ docs/            architecture, user guide
 2. **Decimal only.** Amounts are stored as `BIGINT` counts of 1/10,000 of a unit and
    surface as `Decimal` through a SQLAlchemy `TypeDecorator`. `float` never touches an
    amount, including in the Excel exporter.
-3. **Posted documents are immutable.** No update, no delete. Correction happens through
-   a linked reversing (`REVERSAL`) or correcting (`CORRECTION`) document. Drafts are
-   editable and discardable, and every action is written to `audit_log`.
+3. **Posted documents are immutable for non-admins.** Correction still happens through
+   a linked reversing (`REVERSAL`) or correcting (`CORRECTION`) document. Admins can
+   un-post or delete a posted document, or purge a fiscal year, and every action is
+   written to `audit_log`. Drafts are editable and discardable.
 4. **Accounts with history cannot be deleted or renumbered** — only deactivated.
 5. **Numbering is gapless.** Numbers are taken from a locked `number_sequences` row at
    posting time, never `MAX(number)+1`, and never assigned to a draft.

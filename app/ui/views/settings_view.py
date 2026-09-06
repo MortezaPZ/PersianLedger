@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -21,13 +22,14 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QComboBox,
 )
 
 from app import config as config_module
 from app.db import engine as engine_module
 from app.db import migrate
 from app.domain.errors import LedgerError
-from app.services import auth_service, backup_service, master_data
+from app.services import auth_service, backup_service, document_service, master_data
 from app.ui import theme
 from app.ui.views.base_view import BaseView
 from app.ui.widgets import fields
@@ -327,6 +329,15 @@ class SettingsView(BaseView):
             users_btn.clicked.connect(self.manage_users)
             users_layout.addWidget(users_btn)
             self.body.addWidget(users_box)
+            purge_box = QGroupBox("پاک‌سازی اسناد آزمایشی")
+            purge_layout = QVBoxLayout(purge_box)
+            self.purge_year = QComboBox()
+            purge_btn = QPushButton("حذف همه اسناد این سال مالی")
+            purge_btn.setProperty("kind", "danger")
+            purge_btn.clicked.connect(self.purge_test_documents)
+            purge_layout.addWidget(self.purge_year)
+            purge_layout.addWidget(purge_btn)
+            self.body.addWidget(purge_box)
         help_btn = QPushButton("پاسخ پرسش‌های راهنما")
         help_btn.clicked.connect(self.open_answers)
         self.body.addWidget(help_btn)
@@ -375,6 +386,11 @@ class SettingsView(BaseView):
         for table in (self.currency_table, self.year_table, self.backup_table):
             fit_columns(table)
             size_to_rows(table)
+        if hasattr(self, "purge_year"):
+            self.purge_year.clear()
+            for y in years:
+                if not y.is_closed:
+                    self.purge_year.addItem(y.title, y.id)
         engine = engine_module.get_engine()
         rev = migrate.current_revision(engine)
         self.about_label.setText(
@@ -472,3 +488,25 @@ class SettingsView(BaseView):
             self.warn(str(exc))
         except Exception as exc:
             self.report_error(exc)
+
+    def purge_test_documents(self) -> None:
+        year_id = self.purge_year.currentData()
+        title = self.purge_year.currentText()
+        if not year_id:
+            return
+        text, ok = QInputDialog.getText(self, APP_NAME_FA, "برای تأیید، کلمه «حذف» را تایپ کنید")
+        if not ok or text != "حذف":
+            return
+        try:
+            info = backup_service.create(engine_module.get_engine(), self.ctx.config)
+            self.inform(f"پشتیبان ایمنی:\n{info.path}")
+            with self.ctx.session() as db:
+                year = master_data.fiscal_years(db)
+                fy = next(y for y in year if y.id == year_id)
+                count = document_service.purge_fiscal_year(db, fy, self.ctx.user_id)
+            self.inform(f"{count} سند حذف شد و شماره‌گذاری سال مالی {title} از ۱ شروع می‌شود.")
+            self.ctx.reset_caches()
+            self.ctx.dataChanged.emit()
+            self.reload()
+        except LedgerError as exc:
+            self.warn(str(exc))
