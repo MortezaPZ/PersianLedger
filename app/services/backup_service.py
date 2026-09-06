@@ -7,6 +7,7 @@ the destination, giving a file that opens cleanly on its own.
 from __future__ import annotations
 
 import datetime as _dt
+import gc
 import shutil
 import sqlite3
 from dataclasses import dataclass
@@ -34,6 +35,15 @@ class BackupInfo:
         if kb < 1024:
             return f"{kb:.0f} کیلوبایت"
         return f"{kb / 1024:.1f} مگابایت"
+
+
+@dataclass
+class RestoreResult:
+    safety_path: Path
+    documents: int
+    posted: int
+    accounts: int
+    tafsilis: int
 
 
 def suggested_name(prefix: str = "backup") -> str:
@@ -79,10 +89,10 @@ def inspect(path: Path) -> BackupInfo:
     return BackupInfo(source, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime))
 
 
-def restore(engine: Engine, cfg: AppConfig, source: Path) -> Path:
+def restore(engine: Engine, cfg: AppConfig, source: Path) -> RestoreResult:
     """Replace the live database, keeping a safety copy of what was there.
 
-    Returns the path of the safety copy. The caller must reopen the engine
+    Returns counts from the restored file. The caller must reopen the engine
     afterwards — the file underneath it has changed.
     """
     if cfg.backend != "sqlite":
@@ -94,15 +104,46 @@ def restore(engine: Engine, cfg: AppConfig, source: Path) -> Path:
         with engine.connect() as connection:
             connection.execute(text("VACUUM INTO :path"), {"path": str(safety)})
     engine.dispose()
+    gc.collect()
     if live.exists():
-        live.unlink()
+        try:
+            live.unlink()
+        except PermissionError as exc:
+            raise BackupError(
+                "فایل دیتابیس در حال استفاده است. برنامه را ببندید و دوباره باز کنید، سپس بازیابی را تکرار کنید."
+            ) from exc
     shutil.copy2(source, live)
     wal = Path(str(live) + "-wal")
     shm = Path(str(live) + "-shm")
     for extra in (wal, shm):
         if extra.exists():
             extra.unlink()
-    return safety
+    try:
+        conn = sqlite3.connect(f"file:{live.as_posix()}?mode=ro", uri=True)
+        try:
+            check = conn.execute("PRAGMA integrity_check").fetchone()
+            if not check or check[0] != "ok":
+                raise BackupError("فایل پشتیبان آسیب‌دیده است؛ دیتابیس قبلی دست‌نخورده ماند.")
+            documents = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+            posted = conn.execute("SELECT COUNT(*) FROM documents WHERE status='POSTED'").fetchone()[0]
+            accounts = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
+            tafsilis = conn.execute("SELECT COUNT(*) FROM tafsilis").fetchone()[0]
+        finally:
+            conn.close()
+    except BackupError:
+        _put_safety_back(live, safety)
+        raise
+    except sqlite3.DatabaseError as exc:
+        _put_safety_back(live, safety)
+        raise BackupError("فایل پشتیبان آسیب‌دیده است؛ دیتابیس قبلی دست‌نخورده ماند.") from exc
+    return RestoreResult(safety, documents, posted, accounts, tafsilis)
+
+
+def _put_safety_back(live: Path, safety: Path) -> None:
+    if live.exists():
+        live.unlink(missing_ok=True)
+    if safety.exists():
+        shutil.copy2(safety, live)
 
 
 def list_backups(cfg: AppConfig) -> list[BackupInfo]:

@@ -51,6 +51,9 @@ class DocumentListView(BaseView):
         self.body.addWidget(self.table)
         self.reload()
 
+    def refresh(self) -> None:
+        self.reload()
+
     def reload(self) -> None:
         with self.ctx.read_session() as db:
             stmt = select(Document).order_by(Document.date_g.desc(), Document.number.desc())

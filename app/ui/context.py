@@ -73,6 +73,11 @@ class AppContext(QObject):
                 self._refdata = RefData.load(db)
         return self._refdata
 
+    def reset_caches(self) -> None:
+        self._refdata = None
+        self._fiscal_year_id = None
+        self.reload_refdata()
+
     def reload_refdata(self) -> None:
         """Refresh in place; delegates and models keep the same object."""
         with self.read_session() as db:

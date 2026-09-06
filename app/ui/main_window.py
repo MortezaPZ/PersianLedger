@@ -175,6 +175,9 @@ class MainWindow(QMainWindow):
 
     def _after_restore(self) -> None:
         for view in self.views:
+            if isinstance(view, DocumentEntryView):
+                view.reset_after_restore()
+        for view in self.views:
             if hasattr(view, "refresh"):
                 view.refresh()
         clamp_to_screen(self)

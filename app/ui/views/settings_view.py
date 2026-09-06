@@ -455,15 +455,18 @@ class SettingsView(BaseView):
 
     def apply_restore(self, path: Path) -> None:
         try:
-            safety = backup_service.restore(engine_module.get_engine(), self.ctx.config, Path(path))
+            result = backup_service.restore(engine_module.get_engine(), self.ctx.config, Path(path))
             engine_module.init_engine(self.ctx.config)
             migrate.upgrade_to_head(engine_module.get_engine(), self.ctx.config)
+            self.ctx.reset_caches()
             self.ctx.resync_user()
-            self.ctx.reload_refdata()
             self.ctx.dataChanged.emit()
             if callable(self.after_restore):
                 self.after_restore()
-            self.inform(f"بازیابی انجام شد. نسخه ایمنی:\n{safety}")
+            r = result
+            self.inform(
+                f"بازیابی انجام شد.\n{r.documents} سند ({r.posted} قطعی)، {r.accounts} سرفصل و {r.tafsilis} تفصیلی از فایل پشتیبان بارگذاری شد.\nنسخه ایمنی از وضعیت قبلی:\n{r.safety_path}"
+            )
             self.reload()
         except LedgerError as exc:
             self.warn(str(exc))

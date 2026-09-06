@@ -278,6 +278,9 @@ class DocumentEntryView(BaseView):
             self.model.read_only = doc.is_posted
             self.attachments.set_document(doc)
 
+    def reset_after_restore(self) -> None:
+        self.clear()
+
     def clear(self) -> None:
         self._remember(None)
         self.model.read_only = False
