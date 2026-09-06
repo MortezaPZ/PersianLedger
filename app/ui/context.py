@@ -3,10 +3,13 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from PySide6.QtCore import QObject, Signal
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.bootstrap import Startup
 from app.db import engine as engine_module
 from app.domain import jalali
+from app.domain.errors import ConcurrencyError
 from app.services import master_data
 from app.ui.refdata import RefData
 
@@ -34,8 +37,14 @@ class AppContext(QObject):
         try:
             yield db
             db.commit()
-        except Exception:
+        except Exception as exc:
             db.rollback()
+            if isinstance(exc, StaleDataError):
+                raise ConcurrencyError() from exc
+            if isinstance(exc, OperationalError):
+                message = str(exc).lower()
+                if "could not serialize" in message or "deadlock detected" in message:
+                    raise ConcurrencyError() from exc
             raise
         finally:
             db.close()

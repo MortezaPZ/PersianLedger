@@ -9,6 +9,7 @@ from app import config as config_module
 from app.config import AppConfig
 from app.db import engine as engine_module
 from app.db import migrate, seed
+from app.db.engine import SCHEMA_LOCK_KEY, advisory_lock
 
 
 @dataclass
@@ -24,13 +25,14 @@ def start(cfg: AppConfig | None = None, with_demo: bool = False) -> Startup:
     engine = engine_module.init_engine(cfg)
     result = migrate.upgrade_to_head(engine, cfg)
     seeded = False
-    with engine_module.new_session() as session:
-        if seed.is_empty(session):
-            seed.seed_base(session)
-            seeded = True
-            if with_demo:
-                seed.seed_demo(session)
-            # The employer asks for this worked example in every round of
-            # feedback, so a plain install has to show it too -- not just --demo.
-            seed.seed_project_example(session)
+    with engine.connect() as lock_conn, advisory_lock(lock_conn, SCHEMA_LOCK_KEY):
+        with engine_module.new_session() as session:
+            if seed.is_empty(session):
+                seed.seed_base(session)
+                seeded = True
+                if with_demo:
+                    seed.seed_demo(session)
+                # The employer asks for this worked example in every round of
+                # feedback, so a plain install has to show it too -- not just --demo.
+                seed.seed_project_example(session)
     return Startup(cfg, engine, result, seeded)

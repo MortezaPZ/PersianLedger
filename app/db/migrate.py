@@ -14,6 +14,7 @@ from sqlalchemy import Engine, inspect
 
 from app import paths
 from app.config import AppConfig
+from app.db.engine import SCHEMA_LOCK_KEY, advisory_lock
 
 
 class SchemaTooNewError(RuntimeError):
@@ -67,29 +68,30 @@ def _backup_sqlite(cfg: AppConfig, tag: str) -> Path | None:
 
 def upgrade_to_head(engine: Engine, cfg: AppConfig) -> MigrationResult:
     url = cfg.database_url()
-    head = head_revision(url)
-    inspector = inspect(engine)
-    if not inspector.has_table("alembic_version") and not inspector.has_table("documents"):
-        current = None
-    else:
-        current = current_revision(engine)
-    if current == head:
-        return MigrationResult(current, head, None, False)
-    known = _known_revisions(url)
-    if current and current not in known:
-        raise SchemaTooNewError(
-            f"نسخه ساختار دیتابیس ({current}) از نسخه این برنامه جدیدتر است. "
-            "لطفاً نسخه جدیدتر برنامه را نصب کنید."
-        )
-    backup = _backup_sqlite(cfg, current or "unknown")
-    alembic_cfg = alembic_config(url)
-    try:
-        with engine.begin() as connection:
-            alembic_cfg.attributes["connection"] = connection
-            command.upgrade(alembic_cfg, "head")
-    except Exception:
-        engine.dispose()
-        if backup and cfg.sqlite_path:
-            shutil.copy2(backup, Path(cfg.sqlite_path))
-        raise
-    return MigrationResult(current, head, backup, True)
+    with engine.connect() as lock_conn, advisory_lock(lock_conn, SCHEMA_LOCK_KEY):
+        head = head_revision(url)
+        inspector = inspect(engine)
+        if not inspector.has_table("alembic_version") and not inspector.has_table("documents"):
+            current = None
+        else:
+            current = current_revision(engine)
+        if current == head:
+            return MigrationResult(current, head, None, False)
+        known = _known_revisions(url)
+        if current and current not in known:
+            raise SchemaTooNewError(
+                f"نسخه ساختار دیتابیس ({current}) از نسخه این برنامه جدیدتر است. "
+                "لطفاً نسخه جدیدتر برنامه را نصب کنید."
+            )
+        backup = _backup_sqlite(cfg, current or "unknown")
+        alembic_cfg = alembic_config(url)
+        try:
+            with engine.begin() as connection:
+                alembic_cfg.attributes["connection"] = connection
+                command.upgrade(alembic_cfg, "head")
+        except Exception:
+            engine.dispose()
+            if backup and cfg.sqlite_path:
+                shutil.copy2(backup, Path(cfg.sqlite_path))
+            raise
+        return MigrationResult(current, head, backup, True)

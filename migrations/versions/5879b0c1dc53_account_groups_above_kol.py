@@ -50,7 +50,7 @@ def upgrade() -> None:
     for code, name, kind, order in defaults:
         op.execute(
             "INSERT INTO account_groups (code, name, account_type, sort_order, is_active) "
-            f"SELECT '{code}', '{name}', '{kind}', {order}, 1 "
+            f"SELECT '{code}', '{name}', '{kind}', {order}, TRUE "
             f"WHERE NOT EXISTS (SELECT 1 FROM account_groups WHERE code = '{code}')"
         )
         op.execute(
