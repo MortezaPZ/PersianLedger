@@ -52,16 +52,16 @@ def suggested_name(prefix: str = "backup") -> str:
 
 def create(engine: Engine, cfg: AppConfig, target: Path | None = None, user_id: int | None = None) -> BackupInfo:
     """Write a self-contained copy of the database to `target`."""
+    if cfg.backend == "postgresql":
+        from app.services import server_backup
+
+        return server_backup.create(cfg, user_id, target)
     from app.domain.permissions import Perm
     from app.services import auth_service
     from sqlalchemy.orm import Session as SASession
 
     with SASession(engine) as db:
         auth_service.require(db, user_id, Perm.BACKUP)
-    if cfg.backend != "sqlite":
-        raise BackupError(
-            "پشتیبان‌گیری از این نوع دیتابیس از داخل برنامه انجام نمی‌شود؛ از ابزار پشتیبان‌گیری سرور استفاده کنید."
-        )
     dest = Path(target) if target else cfg.backup_dir / suggested_name()
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
@@ -105,10 +105,12 @@ def restore(engine: Engine, cfg: AppConfig, source: Path, user_id: int | None = 
     from app.services import auth_service
     from sqlalchemy.orm import Session as SASession
 
+    if cfg.backend == "postgresql":
+        from app.services import server_backup
+
+        return server_backup.restore(cfg, user_id, source)
     with SASession(engine) as db:
         auth_service.require(db, user_id, Perm.RESTORE)
-    if cfg.backend != "sqlite":
-        raise BackupError("بازیابی فقط برای دیتابیس محلی SQLite در دسترس است.")
     inspect(source)
     live = Path(cfg.sqlite_path)
     safety = cfg.backup_dir / suggested_name("pre-restore")
@@ -163,4 +165,12 @@ def list_backups(cfg: AppConfig) -> list[BackupInfo]:
     for path in sorted(cfg.backup_dir.glob("*.sqlite3"), reverse=True):
         stat = path.stat()
         items.append(BackupInfo(path, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime)))
+    if cfg.backend == "postgresql":
+        from app.services import server_backup
+
+        items.extend(server_backup.list_backups(cfg))
+    else:
+        for path in sorted(cfg.backup_dir.glob("*.pgdump"), reverse=True):
+            stat = path.stat()
+            items.append(BackupInfo(path, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime)))
     return items

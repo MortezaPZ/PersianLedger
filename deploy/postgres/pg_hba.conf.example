@@ -1,0 +1,2 @@
+# Example fragment — merge into the server's pg_hba.conf
+host persianledger persianledger 192.168.0.0/16 scram-sha-256

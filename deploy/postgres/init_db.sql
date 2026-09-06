@@ -1,0 +1,2 @@
+CREATE ROLE persianledger LOGIN PASSWORD 'CHANGE_ME';
+CREATE DATABASE persianledger OWNER persianledger ENCODING 'UTF8' TEMPLATE template0;

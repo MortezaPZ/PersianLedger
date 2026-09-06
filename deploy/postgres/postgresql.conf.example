@@ -1,0 +1,3 @@
+listen_addresses = '*'
+max_connections = 100
+password_encryption = scram-sha-256

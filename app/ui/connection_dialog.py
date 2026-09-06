@@ -28,10 +28,11 @@ from app.version import APP_NAME_FA
 
 
 class ConnectionDialog(QDialog):
-    def __init__(self, cfg: AppConfig, parent=None, *, save_path: Path | None = None) -> None:
+    def __init__(self, cfg: AppConfig, parent=None, *, save_path: Path | None = None, persist: bool = True) -> None:
         super().__init__(parent)
         self.cfg = cfg
         self.save_path = save_path
+        self.persist = persist
         self.setLayoutDirection(Qt.RightToLeft)
         self.setWindowTitle("تنظیمات اتصال به دیتابیس")
         layout = QVBoxLayout(self)
@@ -120,10 +121,11 @@ class ConnectionDialog(QDialog):
 
     def _save(self) -> None:
         cfg = self.candidate()
-        config_module.save(cfg, path=self.save_path)
-        QMessageBox.information(
-            self,
-            APP_NAME_FA,
-            "تنظیمات ذخیره شد. برنامه را دوباره اجرا کنید تا به دیتابیس جدید متصل شود.",
-        )
+        if self.persist:
+            config_module.save(cfg, path=self.save_path)
+            QMessageBox.information(
+                self,
+                APP_NAME_FA,
+                "تنظیمات ذخیره شد. برنامه را دوباره اجرا کنید تا به دیتابیس جدید متصل شود.",
+            )
         self.accept()

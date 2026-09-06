@@ -336,6 +336,13 @@ class SettingsView(BaseView):
         self.backup_table.setHorizontalHeaderLabels(["فایل", "حجم", "تاریخ"])
         layout.addWidget(self.backup_table)
         self.body.addWidget(box)
+        if self.ctx.is_admin and not self.ctx.config.is_server():
+            mig_box = QGroupBox("انتقال به سرور")
+            mig_layout = QVBoxLayout(mig_box)
+            mig_btn = QPushButton("انتقال دیتابیس فعلی به PostgreSQL…")
+            mig_btn.clicked.connect(self.migrate_to_postgres)
+            mig_layout.addWidget(mig_btn)
+            self.body.addWidget(mig_box)
         if self.ctx.is_admin:
             users_box = QGroupBox("کاربران")
             users_layout = QVBoxLayout(users_box)
@@ -475,7 +482,7 @@ class SettingsView(BaseView):
             self.warn(str(exc))
 
     def backup_as(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "تهیه پشتیبان", str(self.ctx.config.backup_dir / backup_service.suggested_name()), "SQLite (*.sqlite3)")
+        path, _ = QFileDialog.getSaveFileName(self, "تهیه پشتیبان", str(self.ctx.config.backup_dir / backup_service.suggested_name()), "پشتیبان (*.sqlite3 *.pgdump)")
         if not path:
             return
         try:
@@ -486,7 +493,7 @@ class SettingsView(BaseView):
             self.warn(str(exc))
 
     def restore(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "بازیابی از فایل", str(self.ctx.config.backup_dir), "SQLite (*.sqlite3 *.db)")
+        path, _ = QFileDialog.getOpenFileName(self, "بازیابی از فایل", str(self.ctx.config.backup_dir), "پشتیبان (*.sqlite3 *.pgdump)")
         if not path or not self.confirm("بازیابی فایل پشتیبان، دیتابیس فعلی را جایگزین می‌کند. ادامه می‌دهید؟"):
             return
         self.apply_restore(Path(path))
@@ -532,3 +539,35 @@ class SettingsView(BaseView):
             self.reload()
         except LedgerError as exc:
             self.warn(str(exc))
+
+    def migrate_to_postgres(self) -> None:
+        from PySide6.QtWidgets import QDialog, QProgressDialog
+
+        from app import config as cfgmod
+        from app.services.data_migration import migrate as migrate_data
+        from app.ui.connection_dialog import ConnectionDialog
+
+        dialog = ConnectionDialog(self.ctx.config, self, persist=False)
+        dialog.radio_pg.setChecked(True)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        target = dialog.candidate()
+        progress = QProgressDialog("انتقال…", None, 0, 0, self)
+        progress.setWindowTitle(APP_NAME_FA)
+        progress.show()
+        try:
+            report = migrate_data(
+                Path(self.ctx.config.sqlite_path),
+                target.database_url(),
+                replace=True,
+                attachments_dir=self.ctx.config.attachments_dir,
+                progress=lambda _n: None,
+            )
+        finally:
+            progress.close()
+        if report.mismatches:
+            self.warn("انتقال ناقص بود:\n" + "\n".join(report.mismatches[:12]))
+            return
+        if self.confirm("انتقال با موفقیت انجام شد. تنظیمات اتصال روی سرور جدید ذخیره شود؟"):
+            cfgmod.save(target)
+            self.inform("تنظیمات ذخیره شد. برنامه را دوباره اجرا کنید تا به دیتابیس جدید متصل شود.")
