@@ -75,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     context.username = login.username
     context.display_name = login.display_name
     context.is_admin = login.is_admin
+    context.role = login.role
     window = MainWindow(context)
     window.show()
     return app.exec()

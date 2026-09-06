@@ -376,8 +376,8 @@ def test_trial_balance_has_no_description_column(qapp, tmp_path):
     assert TrialBalanceModel()._headers() == []
 
 
-def test_stale_user_id_does_not_block_saving(qapp, tmp_path):
-    """A restored backup can lack the signed-in account; writes must still work."""
+def test_stale_user_id_is_denied_on_save(qapp, tmp_path):
+    """A restored backup can lack the signed-in account; writes must be refused."""
     from app.services import auth_service
 
     ctx = _ctx(tmp_path)
@@ -392,12 +392,14 @@ def test_stale_user_id_does_not_block_saving(qapp, tmp_path):
         LineRow(acc.id, None, None, cur.id, Decimal("10"), Decimal("0")),
         LineRow(acc.id, None, None, cur.id, Decimal("0"), Decimal("10")),
     ])
+    warned = []
     errors = []
-    with patch.object(view, "inform"), patch.object(view, "warn"), \
+    with patch.object(view, "inform"), patch.object(view, "warn", side_effect=lambda t: warned.append(t)), \
             patch.object(view, "report_error", side_effect=lambda e: errors.append(e)):
         view.save_draft()
-    assert not errors, f"stale user id must not abort the write: {errors}"
-    assert view.document_id
+    assert not errors
+    assert warned
+    assert view.document_id is None
     with ctx.read_session() as db:
         assert auth_service.valid_user_id(db, 9999) is None
 

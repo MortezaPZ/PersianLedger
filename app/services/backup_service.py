@@ -50,8 +50,14 @@ def suggested_name(prefix: str = "backup") -> str:
     return f"{prefix}-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.sqlite3"
 
 
-def create(engine: Engine, cfg: AppConfig, target: Path | None = None) -> BackupInfo:
+def create(engine: Engine, cfg: AppConfig, target: Path | None = None, user_id: int | None = None) -> BackupInfo:
     """Write a self-contained copy of the database to `target`."""
+    from app.domain.permissions import Perm
+    from app.services import auth_service
+    from sqlalchemy.orm import Session as SASession
+
+    with SASession(engine) as db:
+        auth_service.require(db, user_id, Perm.BACKUP)
     if cfg.backend != "sqlite":
         raise BackupError(
             "پشتیبان‌گیری از این نوع دیتابیس از داخل برنامه انجام نمی‌شود؛ از ابزار پشتیبان‌گیری سرور استفاده کنید."
@@ -89,12 +95,18 @@ def inspect(path: Path) -> BackupInfo:
     return BackupInfo(source, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime))
 
 
-def restore(engine: Engine, cfg: AppConfig, source: Path) -> RestoreResult:
+def restore(engine: Engine, cfg: AppConfig, source: Path, user_id: int | None = None) -> RestoreResult:
     """Replace the live database, keeping a safety copy of what was there.
 
     Returns counts from the restored file. The caller must reopen the engine
     afterwards — the file underneath it has changed.
     """
+    from app.domain.permissions import Perm
+    from app.services import auth_service
+    from sqlalchemy.orm import Session as SASession
+
+    with SASession(engine) as db:
+        auth_service.require(db, user_id, Perm.RESTORE)
     if cfg.backend != "sqlite":
         raise BackupError("بازیابی فقط برای دیتابیس محلی SQLite در دسترس است.")
     inspect(source)

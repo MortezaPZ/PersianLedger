@@ -5,6 +5,7 @@ from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem
 
 from app.domain.enums import DOCUMENT_STATUS_FA, DOCUMENT_TYPE_FA, DocumentStatus, DocumentType
+from app.domain.permissions import Perm
 from app.domain.errors import LedgerError
 from app.db.models import Document
 from app.domain import jalali
@@ -41,15 +42,19 @@ class DocumentListView(BaseView):
         rev = QPushButton("سند برگشتی"); rev.clicked.connect(self.reverse)
         corr = QPushButton("سند اصلاحی"); corr.clicked.connect(self.correct)
         delete = QPushButton("حذف پیش‌نویس"); delete.setProperty("kind", "danger"); delete.clicked.connect(self.delete_draft)
+        self.rev_btn = rev
+        self.corr_btn = corr
+        self.delete_btn = delete
+        unpost = QPushButton("بازگردانی به پیش‌نویس")
+        unpost.clicked.connect(self.unpost)
+        delete_posted = QPushButton("حذف سند قطعی")
+        delete_posted.setProperty("kind", "danger")
+        delete_posted.clicked.connect(self.delete_posted)
+        self.unpost_btn = unpost
+        self.delete_posted_btn = delete_posted
         actions.addWidget(open_btn); actions.addWidget(rev); actions.addWidget(corr); actions.addWidget(delete)
-        if self.ctx.is_admin:
-            unpost = QPushButton("بازگردانی به پیش‌نویس")
-            unpost.clicked.connect(self.unpost)
-            delete_posted = QPushButton("حذف سند قطعی")
-            delete_posted.setProperty("kind", "danger")
-            delete_posted.clicked.connect(self.delete_posted)
-            actions.addWidget(unpost)
-            actions.addWidget(delete_posted)
+        actions.addWidget(unpost)
+        actions.addWidget(delete_posted)
         actions.addStretch()
         self.body.addLayout(actions)
         self.table = QTableWidget(0, 6)
@@ -58,7 +63,21 @@ class DocumentListView(BaseView):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.doubleClicked.connect(self.open_current)
         self.body.addWidget(self.table)
+        self._apply_permissions()
         self.reload()
+
+    def _apply_permissions(self) -> None:
+        mapping = (
+            (self.rev_btn, Perm.DOC_REVERSE),
+            (self.corr_btn, Perm.DOC_REVERSE),
+            (self.delete_btn, Perm.DOC_DRAFT),
+            (self.unpost_btn, Perm.DOC_UNPOST),
+            (self.delete_posted_btn, Perm.DOC_DELETE_POSTED),
+        )
+        for widget, perm in mapping:
+            ok = self.ctx.can(perm)
+            widget.setEnabled(ok)
+            widget.setToolTip("" if ok else "دسترسی لازم را ندارید")
 
     def refresh(self) -> None:
         self.reload()

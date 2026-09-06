@@ -34,6 +34,21 @@ class DocumentType(str, enum.Enum):
     CORRECTION = "CORRECTION"
 
 
+class UserRole(str, enum.Enum):
+    ADMIN = "ADMIN"
+    ACCOUNTANT = "ACCOUNTANT"
+    CLERK = "CLERK"
+    VIEWER = "VIEWER"
+
+
+USER_ROLE_FA = {
+    UserRole.ADMIN: "مدیر سیستم",
+    UserRole.ACCOUNTANT: "حسابدار",
+    UserRole.CLERK: "کاربر ثبت",
+    UserRole.VIEWER: "فقط مشاهده",
+}
+
+
 class DocumentStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     POSTED = "POSTED"

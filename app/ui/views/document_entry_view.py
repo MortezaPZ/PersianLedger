@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.domain.enums import DOCUMENT_TYPE_FA, DocumentType
+from app.domain.permissions import Perm
 from app.domain.errors import ConcurrencyError, LedgerError
 from app.services import document_service, master_data
 from app.ui.views.base_view import BaseView
@@ -313,7 +314,11 @@ class DocumentEntryView(BaseView):
         style = self.balance.style()
         style.unpolish(self.balance)
         style.polish(self.balance)
-        self.post_btn.setEnabled(ok and len(self.model.filled_rows()) >= 2 and not self.model.read_only)
+        self.save_btn.setEnabled(self.ctx.can(Perm.DOC_DRAFT) and not self.model.read_only)
+        self.save_btn.setToolTip("" if self.ctx.can(Perm.DOC_DRAFT) else "دسترسی لازم را ندارید")
+        can_post = self.ctx.can(Perm.DOC_POST)
+        self.post_btn.setEnabled(ok and len(self.model.filled_rows()) >= 2 and not self.model.read_only and can_post)
+        self.post_btn.setToolTip("" if can_post else "دسترسی لازم را ندارید")
 
     def _new_tafsili(self, row: int, slot: int) -> None:
         from app.ui.views.tafsili_view import TafsiliDialog

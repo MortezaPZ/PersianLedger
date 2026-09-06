@@ -28,6 +28,7 @@ class AppContext(QObject):
         self.username: str | None = None
         self.display_name: str | None = None
         self.is_admin: bool = False
+        self.role = None
         self._refdata: RefData | None = None
         self._fiscal_year_id: int | None = None
 
@@ -72,8 +73,15 @@ class AppContext(QObject):
                     self.user_id = user.id
                     self.display_name = user.display_name
                     self.is_admin = user.is_admin
+                    from app.domain.enums import UserRole
+                    self.role = user.role
                     return
             self.user_id = auth_service.valid_user_id(db, self.user_id)
+
+    def can(self, perm) -> bool:
+        from app.domain.permissions import has
+
+        return has(self.role, perm)
 
     @property
     def refdata(self) -> RefData:

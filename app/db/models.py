@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.types import JalaliDateColumn, MoneyColumn, utcnow
-from app.domain.enums import AccountNature, AccountType, AuditAction, DocumentStatus, DocumentType
+from app.domain.enums import AccountNature, AccountType, AuditAction, DocumentStatus, DocumentType, UserRole
 
 
 def _enum(py_enum, name: str) -> Enum:
@@ -228,6 +228,7 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    role: Mapped[UserRole] = mapped_column(_enum(UserRole, "user_role"), nullable=False, default=UserRole.ACCOUNTANT)
     created_at: Mapped[_dt.datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     last_login_at: Mapped[_dt.datetime | None] = mapped_column(DateTime)
 

@@ -28,7 +28,9 @@ from PySide6.QtWidgets import (
 from app import config as config_module
 from app.db import engine as engine_module
 from app.db import migrate
+from app.domain.enums import UserRole, USER_ROLE_FA
 from app.domain.errors import LedgerError
+from app.domain.permissions import Perm
 from app.services import auth_service, backup_service, document_service, master_data
 from app.ui import theme
 from app.ui.views.base_view import BaseView
@@ -48,7 +50,9 @@ class UserDialog(QDialog):
         self.username = QLineEdit()
         self.display_name = QLineEdit()
         self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
-        self.is_admin = QCheckBox("مدیر سیستم")
+        self.role = QComboBox()
+        for role, label in USER_ROLE_FA.items():
+            self.role.addItem(label, role)
         self.is_active = QCheckBox("فعال")
         self.is_active.setChecked(True)
         form.addRow("نام کاربری", self.username)
@@ -57,13 +61,15 @@ class UserDialog(QDialog):
             self.username.setText(user.username)
             self.username.setReadOnly(True)
             self.display_name.setText(user.display_name)
-            self.is_admin.setChecked(user.is_admin)
+            idx = self.role.findData(user.role)
+            if idx >= 0:
+                self.role.setCurrentIndex(idx)
             self.is_active.setChecked(user.is_active)
             form.addRow("رمز عبور جدید (خالی = بدون تغییر)", self.password)
             form.addRow(self.is_active)
         else:
             form.addRow("رمز عبور", self.password)
-        form.addRow(self.is_admin)
+        form.addRow("نقش", self.role)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         fields.localize_dialog_buttons(buttons)
         buttons.accepted.connect(self.accept)
@@ -79,7 +85,7 @@ class UserDialog(QDialog):
                         username=self.username.text(),
                         display_name=self.display_name.text(),
                         password=self.password.text(),
-                        is_admin=self.is_admin.isChecked(),
+                        role=self.role.currentData() or UserRole.ACCOUNTANT,
                         created_by=self.ctx.user_id,
                     )
                 else:
@@ -87,7 +93,7 @@ class UserDialog(QDialog):
                     row.display_name = (self.display_name.text() or "").strip() or row.username
                     if self.password.text().strip():
                         auth_service.set_password(db, row, self.password.text(), user_id=self.ctx.user_id)
-                    auth_service.set_admin(db, row, self.is_admin.isChecked(), user_id=self.ctx.user_id)
+                    auth_service.set_role(db, row, self.role.currentData() or UserRole.ACCOUNTANT, user_id=self.ctx.user_id)
                     auth_service.set_active(db, row, self.is_active.isChecked(), user_id=self.ctx.user_id)
             super().accept()
         except LedgerError as exc:
@@ -111,7 +117,7 @@ class UsersDialog(QDialog):
         bar.addWidget(add); bar.addWidget(edit); bar.addStretch()
         layout.addLayout(bar)
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["نام کاربری", "نام نمایشی", "مدیر", "وضعیت"])
+        self.table.setHorizontalHeaderLabels(["نام کاربری", "نام نمایشی", "نقش", "وضعیت"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.doubleClicked.connect(self.edit_user)
@@ -127,7 +133,7 @@ class UsersDialog(QDialog):
             users = auth_service.list_users(db)
         self.table.setRowCount(len(users))
         for r, u in enumerate(users):
-            values = (u.username, u.display_name, "بله" if u.is_admin else "خیر", "فعال" if u.is_active else "غیرفعال")
+            values = (u.username, u.display_name, USER_ROLE_FA.get(u.role, ""), "فعال" if u.is_active else "غیرفعال")
             for c, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, u.id)
@@ -462,7 +468,7 @@ class SettingsView(BaseView):
 
     def backup_quick(self) -> None:
         try:
-            info = backup_service.create(engine_module.get_engine(), self.ctx.config)
+            info = backup_service.create(engine_module.get_engine(), self.ctx.config, user_id=self.ctx.user_id)
             self.inform(f"پشتیبان ذخیره شد:\n{info.path}")
             self.reload()
         except LedgerError as exc:
@@ -473,7 +479,7 @@ class SettingsView(BaseView):
         if not path:
             return
         try:
-            info = backup_service.create(engine_module.get_engine(), self.ctx.config, Path(path))
+            info = backup_service.create(engine_module.get_engine(), self.ctx.config, Path(path), user_id=self.ctx.user_id)
             self.inform(f"پشتیبان ذخیره شد:\n{info.path}")
             self.reload()
         except LedgerError as exc:
@@ -487,7 +493,7 @@ class SettingsView(BaseView):
 
     def apply_restore(self, path: Path) -> None:
         try:
-            result = backup_service.restore(engine_module.get_engine(), self.ctx.config, Path(path))
+            result = backup_service.restore(engine_module.get_engine(), self.ctx.config, Path(path), user_id=self.ctx.user_id)
             engine_module.init_engine(self.ctx.config)
             migrate.upgrade_to_head(engine_module.get_engine(), self.ctx.config)
             self.ctx.reset_caches()
@@ -514,7 +520,7 @@ class SettingsView(BaseView):
         if not ok or text != "حذف":
             return
         try:
-            info = backup_service.create(engine_module.get_engine(), self.ctx.config)
+            info = backup_service.create(engine_module.get_engine(), self.ctx.config, user_id=self.ctx.user_id)
             self.inform(f"پشتیبان ایمنی:\n{info.path}")
             with self.ctx.session() as db:
                 year = master_data.fiscal_years(db)

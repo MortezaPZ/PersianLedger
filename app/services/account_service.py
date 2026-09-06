@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.models import Account, AccountGroup, AccountCurrency, AccountTafsiliRule, DocumentLine
 from app.domain.enums import AccountNature, AccountType, AuditAction
 from app.domain.errors import InUseError, ValidationError
-from app.services import audit
+from app.services import audit, auth_service
+from app.domain.permissions import Perm
 
 
 def account_groups(session: Session, only_active: bool = False) -> list[AccountGroup]:
@@ -26,6 +27,7 @@ def create_account_group(
     sort_order: int = 0,
     user_id: int | None = None,
 ) -> AccountGroup:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     code = (code or "").strip()
     if not code:
         raise ValidationError("کد گروه الزامی است.")
@@ -118,6 +120,7 @@ def create(
     note: str | None = None,
     user_id: int | None = None,
 ) -> Account:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     code = _check_code(session, code)
     name = (name or "").strip()
     if not name:
@@ -177,6 +180,7 @@ def update(
     note: str | None = None,
     user_id: int | None = None,
 ) -> Account:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     if code is not None and code != account.code:
         if has_activity(session, account.id):
             raise InUseError("این سرفصل سند دارد؛ کد آن قابل تغییر نیست.")
@@ -208,6 +212,7 @@ def update(
 
 
 def set_active(session: Session, account: Account, active: bool, user_id: int | None = None) -> Account:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     account.is_active = active
     session.flush()
     audit.record(
@@ -222,6 +227,7 @@ def set_active(session: Session, account: Account, active: bool, user_id: int | 
 
 
 def delete(session: Session, account: Account, user_id: int | None = None) -> None:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     if has_activity(session, account.id):
         raise InUseError("این سرفصل سند دارد و حذف نمی‌شود. آن را غیرفعال کنید.")
     if has_children(session, account.id):

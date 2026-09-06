@@ -26,6 +26,7 @@ from app.db.types import utcnow
 from app.domain import money
 from app.domain.enums import AuditAction, DocumentStatus, DocumentType
 from app.domain.errors import ImmutableDocumentError, UnbalancedDocumentError, ValidationError
+from app.domain.permissions import Perm
 from app.repositories import sequences
 from app.services import audit, auth_service
 
@@ -240,6 +241,7 @@ def save_draft(
     Header, detail lines and the document number share one SQLAlchemy session.
     The caller commits; on any error the caller rolls back, including the number.
     """
+    auth_service.require(session, user_id, Perm.DOC_DRAFT)
     if document is not None and document.is_posted:
         raise ImmutableDocumentError(document.number or 0)
     creating = document is None
@@ -270,6 +272,7 @@ def save_draft(
 
 def post(session: Session, document: Document, user_id: int | None = None) -> Document:
     """Assign the sequential number and make the document permanent."""
+    auth_service.require(session, user_id, Perm.DOC_POST)
     if document.is_posted:
         raise ImmutableDocumentError(document.number or 0)
     data = DocumentInput(
@@ -320,6 +323,7 @@ def save_and_post(
 
 
 def delete_draft(session: Session, document: Document, user_id: int | None = None) -> None:
+    auth_service.require(session, user_id, Perm.DOC_DRAFT)
     if document.is_posted:
         raise ImmutableDocumentError(document.number or 0)
     number = document.number
@@ -348,6 +352,7 @@ def reverse(
     user_id: int | None = None,
 ) -> Document:
     """Post a mirrored document. The original is never touched beyond a flag."""
+    auth_service.require(session, user_id, Perm.DOC_REVERSE)
     if not original.is_posted:
         raise ValidationError("فقط سند قطعی‌شده قابل برگشت است.")
     if original.is_reversed:
@@ -395,6 +400,7 @@ def create_correction_draft(
     user_id: int | None = None,
 ) -> tuple[Document, Document]:
     """Reverse the original and return an editable copy for the corrected figures."""
+    auth_service.require(session, user_id, Perm.DOC_REVERSE)
     reversal = reverse(
         session,
         original,
@@ -460,6 +466,7 @@ def _year_or_error(session: Session, document: Document) -> FiscalYear:
 
 
 def unpost(session: Session, document: Document, user_id: int | None = None) -> Document:
+    auth_service.require(session, user_id, Perm.DOC_UNPOST)
     if not document.is_posted:
         raise ValidationError("این سند قطعی نیست.")
     year = _year_or_error(session, document)
@@ -495,6 +502,7 @@ def unpost(session: Session, document: Document, user_id: int | None = None) -> 
 
 
 def delete_posted(session: Session, document: Document, user_id: int | None = None) -> None:
+    auth_service.require(session, user_id, Perm.DOC_DELETE_POSTED)
     unpost(session, document, user_id)
     before = {
         "number": document.number,
@@ -513,6 +521,7 @@ def delete_posted(session: Session, document: Document, user_id: int | None = No
 
 
 def purge_fiscal_year(session: Session, fiscal_year: FiscalYear, user_id: int | None = None) -> int:
+    auth_service.require(session, user_id, Perm.DOC_PURGE)
     if fiscal_year.is_closed:
         raise ValidationError(f"سال مالی {fiscal_year.title} بسته شده است.")
     count = session.execute(

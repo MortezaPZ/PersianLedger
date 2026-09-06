@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from app.domain.enums import UserRole
 from app.domain.errors import LedgerError
 from app.services import auth_service
 from app.version import APP_NAME_FA
@@ -27,6 +28,7 @@ class LoginDialog(QDialog):
         self.username: str | None = None
         self.display_name: str | None = None
         self.is_admin: bool = False
+        self.role = None
         self.setLayoutDirection(Qt.RightToLeft)
         self.setWindowTitle(APP_NAME_FA)
         with self.ctx.read_session() as db:
@@ -115,6 +117,7 @@ class LoginDialog(QDialog):
             self.username = user.username
             self.display_name = user.display_name
             self.is_admin = user.is_admin
+            self.role = user.role
         super().accept()
 
     def _accept_first_run(self) -> None:
@@ -129,12 +132,14 @@ class LoginDialog(QDialog):
                     display_name=self.display_edit.text(),
                     password=self.password_edit.text(),
                     is_admin=True,
+                    role=UserRole.ADMIN,
                 )
                 db.flush()
                 self.user_id = user.id
                 self.username = user.username
                 self.display_name = user.display_name
                 self.is_admin = True
+                self.role = UserRole.ADMIN
         except LedgerError as exc:
             QMessageBox.warning(self, APP_NAME_FA, str(exc))
             return

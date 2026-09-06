@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.db.models import User
 from app.db.types import utcnow
-from app.domain.enums import AuditAction
-from app.domain.errors import ValidationError
+from app.domain.enums import AuditAction, UserRole
+from app.domain.errors import PermissionDeniedError, ValidationError
+from app.domain.permissions import Perm, ROLE_PERMS, has
 from app.services import audit
 
 _ITERATIONS = 200_000
@@ -66,6 +67,28 @@ def _validate_username(session: Session, username: str, *, exclude_id: int | Non
     return username
 
 
+def permissions_of(user: User) -> set[Perm]:
+    return set(ROLE_PERMS.get(user.role, set()))
+
+
+def require(session: Session, user_id: int | None, perm: Perm) -> User | None:
+    """Allow the call when `user_id` is None (seed and internal helpers).
+
+    The UI always passes `ctx.user_id`. A restored backup may not contain
+    that user; that case is denied rather than silently proceeding.
+    """
+    if user_id is None:
+        return None
+    user = session.get(User, user_id)
+    if user is None:
+        raise PermissionDeniedError("کاربر شما در این دیتابیس وجود ندارد. دوباره وارد شوید.")
+    if not user.is_active:
+        raise PermissionDeniedError()
+    if not has(user.role, perm):
+        raise PermissionDeniedError()
+    return user
+
+
 def create_user(
     session: Session,
     *,
@@ -73,19 +96,27 @@ def create_user(
     display_name: str,
     password: str,
     is_admin: bool = False,
+    role: UserRole | None = None,
     created_by: int | None = None,
+    user_id: int | None = None,
 ) -> User:
+    actor = created_by if created_by is not None else user_id
+    require(session, actor, Perm.USERS_MANAGE)
     username = _validate_username(session, username)
     if not (password or "").strip():
         raise ValidationError("رمز عبور الزامی است.")
     if len(password) < 4:
         raise ValidationError("رمز عبور باید حداقل ۴ نویسه باشد.")
+    if role is None:
+        role = UserRole.ADMIN if is_admin else UserRole.ACCOUNTANT
+    is_admin = role == UserRole.ADMIN
     row = User(
         username=username,
         display_name=(display_name or "").strip() or username,
         password_hash=hash_password(password),
         is_active=True,
         is_admin=is_admin,
+        role=role,
     )
     session.add(row)
     session.flush()
@@ -94,13 +125,15 @@ def create_user(
         entity_type="User",
         action=AuditAction.CREATE,
         entity_id=row.id,
-        user_id=created_by,
-        after={"username": username, "is_admin": is_admin},
+        user_id=actor,
+        after={"username": username, "role": role.value},
     )
     return row
 
 
 def set_password(session: Session, user: User, new_password: str, *, user_id: int | None = None) -> None:
+    if user_id is not None and user.id != user_id:
+        require(session, user_id, Perm.USERS_MANAGE)
     if len(new_password or "") < 4:
         raise ValidationError("رمز عبور باید حداقل ۴ نویسه باشد.")
     user.password_hash = hash_password(new_password)
@@ -108,6 +141,7 @@ def set_password(session: Session, user: User, new_password: str, *, user_id: in
 
 
 def set_active(session: Session, user: User, is_active: bool, *, user_id: int | None = None) -> None:
+    require(session, user_id, Perm.USERS_MANAGE)
     user.is_active = is_active
     audit.record(
         session,
@@ -118,9 +152,15 @@ def set_active(session: Session, user: User, is_active: bool, *, user_id: int | 
     )
 
 
+def set_role(session: Session, user: User, role: UserRole, *, user_id: int | None = None) -> None:
+    require(session, user_id, Perm.USERS_MANAGE)
+    user.role = role
+    user.is_admin = role == UserRole.ADMIN
+    audit.record(session, entity_type="User", action=AuditAction.UPDATE, entity_id=user.id, user_id=user_id, note=f"role={role.value}")
+
+
 def set_admin(session: Session, user: User, is_admin: bool, *, user_id: int | None = None) -> None:
-    user.is_admin = is_admin
-    audit.record(session, entity_type="User", action=AuditAction.UPDATE, entity_id=user.id, user_id=user_id, note=f"is_admin={is_admin}")
+    set_role(session, user, UserRole.ADMIN if is_admin else UserRole.ACCOUNTANT, user_id=user_id)
 
 
 def authenticate(session: Session, username: str, password: str) -> User | None:

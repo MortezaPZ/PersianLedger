@@ -8,7 +8,8 @@ from app.db.models import AppSetting, Currency, DocumentLine, FiscalYear, Tafsil
 from app.domain import jalali
 from app.domain.enums import AuditAction
 from app.domain.errors import InUseError, ValidationError
-from app.services import audit
+from app.services import audit, auth_service
+from app.domain.permissions import Perm
 
 
 def get_setting(session: Session, key: str, default: str | None = None) -> str | None:
@@ -51,6 +52,7 @@ def create_currency(
     sort_order: int = 0,
     user_id: int | None = None,
 ) -> Currency:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     code = (code or "").strip().upper()
     if not code:
         raise ValidationError("کد ارز الزامی است.")
@@ -82,6 +84,7 @@ def update_currency(
     is_active: bool | None = None,
     user_id: int | None = None,
 ) -> Currency:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     if decimals is not None and decimals != currency.decimals:
         if currency.is_locked or currency_in_use(session, currency.id):
             raise InUseError(f"ارز {currency.code} در اسناد استفاده شده است؛ تعداد اعشار آن قابل تغییر نیست.")
@@ -114,6 +117,7 @@ def fiscal_years(session: Session) -> list[FiscalYear]:
 
 
 def create_fiscal_year(session: Session, jyear: int, user_id: int | None = None) -> FiscalYear:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     title = str(jyear)
     if session.execute(select(FiscalYear.id).where(FiscalYear.title == title)).first():
         raise ValidationError(f"سال مالی {title} قبلاً تعریف شده است.")
@@ -142,6 +146,7 @@ def current_fiscal_year(session: Session) -> FiscalYear | None:
 
 
 def set_year_closed(session: Session, year: FiscalYear, closed: bool, user_id: int | None = None) -> FiscalYear:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     year.is_closed = closed
     session.flush()
     audit.record(session, entity_type="FiscalYear", action=AuditAction.UPDATE, entity_id=year.id, user_id=user_id, after={"is_closed": closed})
@@ -156,6 +161,7 @@ def tafsili_groups(session: Session, only_active: bool = False) -> list[TafsiliG
 
 
 def create_tafsili_group(session: Session, *, code: str, name: str, user_id: int | None = None) -> TafsiliGroup:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     code = (code or "").strip()
     if not code:
         raise ValidationError("کد گروه تفصیلی الزامی است.")
@@ -196,6 +202,7 @@ def set_tafsili_groups(
     user_id: int | None = None,
 ) -> Tafsili:
     """Replace the group membership. The home group is always kept."""
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     wanted = {item.group_id}
     if group_ids:
         wanted.update(group_ids)
@@ -265,6 +272,7 @@ def create_tafsili(
     extra_group_ids: list[int] | None = None,
     user_id: int | None = None,
 ) -> Tafsili:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     code = (code or "").strip()
     name = (name or "").strip()
     if not code:
@@ -314,6 +322,7 @@ def update_tafsili(
     is_active: bool | None = None,
     user_id: int | None = None,
 ) -> Tafsili:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     in_use = tafsili_in_use(session, item.id)
     if code is not None:
         code = code.strip()
@@ -349,6 +358,7 @@ def update_tafsili(
 
 
 def delete_tafsili(session: Session, item: Tafsili, user_id: int | None = None) -> None:
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
     if tafsili_in_use(session, item.id):
         raise InUseError(f"تفصیلی «{item.display}» سند دارد و حذف نمی‌شود. آن را غیرفعال کنید.")
     audit.record(
