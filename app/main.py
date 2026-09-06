@@ -38,12 +38,29 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationVersion(APP_VERSION)
     cfg = config_module.load()
     theme.apply(app, dark=cfg.dark_mode)
-    try:
-        startup = bootstrap.start(cfg, with_demo=with_demo)
-    except SchemaTooNewError as exc:
-        return _fatal(str(exc))
-    except Exception as exc:
-        return _fatal("باز کردن دیتابیس ممکن نشد.\n" + str(exc), traceback.format_exc())
+    while True:
+        try:
+            startup = bootstrap.start(cfg, with_demo=with_demo)
+            break
+        except SchemaTooNewError as exc:
+            return _fatal(str(exc))
+        except Exception as exc:
+            detail = traceback.format_exc()
+            log.critical("باز کردن دیتابیس ممکن نشد.\n%s\n%s", exc, detail)
+            box = QMessageBox(QMessageBox.Critical, APP_NAME_FA, "باز کردن دیتابیس ممکن نشد.\n" + str(exc))
+            box.setInformativeText(f"شرح خطا در فایل زیر ثبت شد:\n{logging_setup.log_file()}")
+            box.setDetailedText(detail)
+            settings_btn = box.addButton("تنظیمات اتصال", QMessageBox.ActionRole)
+            box.addButton("خروج", QMessageBox.RejectRole)
+            box.exec()
+            if box.clickedButton() is settings_btn:
+                from app.ui.connection_dialog import ConnectionDialog
+
+                ConnectionDialog(cfg).exec()
+                cfg = config_module.load()
+                theme.apply(app, dark=cfg.dark_mode)
+                continue
+            return 1
     if startup.migration.applied and startup.migration.backup_path:
         QMessageBox.information(
             None,

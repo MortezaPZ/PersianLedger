@@ -195,7 +195,10 @@ class MainWindow(QMainWindow):
         # A bare day/month typed into a date box belongs to the working year.
         self.ctx.sync_date_default_year()
         self.year_label.setText(f"سال مالی {self.ctx.fiscal_year_title}")
-        self.path_label.setText(self.ctx.config.describe())
+        text = self.ctx.config.describe()
+        if self.ctx.config.is_server() and self.ctx.display_name:
+            text = f"{text}  |  کاربر: {self.ctx.display_name}"
+        self.path_label.setText(text)
 
     def go_to(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
@@ -203,6 +206,8 @@ class MainWindow(QMainWindow):
         if btn:
             btn.setChecked(True)
         self.restyle_nav()
+        if self.ctx.config.is_server():
+            self.ctx.reload_refdata()
         view = self.views[index]
         if hasattr(view, "refresh"):
             view.refresh()

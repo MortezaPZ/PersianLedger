@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.domain.enums import DOCUMENT_TYPE_FA, DocumentType
-from app.domain.errors import LedgerError
+from app.domain.errors import ConcurrencyError, LedgerError
 from app.services import document_service, master_data
 from app.ui.views.base_view import BaseView
 from app.ui.widgets import fields
@@ -194,6 +194,8 @@ class DocumentEntryView(BaseView):
             self.ctx.dataChanged.emit()
         except LedgerError as exc:
             self.warn(str(exc))
+            if isinstance(exc, ConcurrencyError) and self.document_id:
+                self.load_document(self.document_id)
         except Exception as exc:
             self.report_error(exc)
 
@@ -215,6 +217,8 @@ class DocumentEntryView(BaseView):
             self.ctx.reload_refdata()
         except LedgerError as exc:
             self.warn(str(exc))
+            if isinstance(exc, ConcurrencyError) and self.document_id:
+                self.load_document(self.document_id)
         except Exception as exc:
             self.report_error(exc)
 

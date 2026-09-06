@@ -6,9 +6,11 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPushButton,
     QVBoxLayout,
 )
 
@@ -51,6 +53,7 @@ class LoginDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._add_connection_row(layout)
         self.username_edit.setFocus()
 
     def _build_first_run(self) -> None:
@@ -77,7 +80,22 @@ class LoginDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._add_connection_row(layout)
         self.username_edit.setFocus()
+
+    def _add_connection_row(self, layout) -> None:
+        conn = QPushButton("تنظیمات اتصال")
+        conn.setFlat(True)
+        conn.clicked.connect(self._open_connection)
+        row = QHBoxLayout()
+        row.addWidget(conn)
+        row.addStretch()
+        layout.addLayout(row)
+
+    def _open_connection(self) -> None:
+        from app.ui.connection_dialog import ConnectionDialog
+
+        ConnectionDialog(self.ctx.config, self).exec()
 
     def accept(self) -> None:
         if self._first_run:

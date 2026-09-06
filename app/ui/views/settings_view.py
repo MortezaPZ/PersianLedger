@@ -258,6 +258,15 @@ class SettingsView(BaseView):
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.after_restore = None
+        conn_box = QGroupBox("اتصال به دیتابیس")
+        conn_layout = QVBoxLayout(conn_box)
+        self.conn_label = QLabel(self.ctx.config.describe())
+        conn_layout.addWidget(self.conn_label)
+        if self.ctx.is_admin:
+            conn_btn = QPushButton("تغییر تنظیمات اتصال")
+            conn_btn.clicked.connect(self.open_connection)
+            conn_layout.addWidget(conn_btn)
+        self.body.addWidget(conn_box)
         self.currency_table = QTableWidget(0, 5)
         self.currency_table.setHorizontalHeaderLabels(["کد", "نام", "نماد", "اعشار", "وضعیت"])
         self.year_table = QTableWidget(0, 4)
@@ -396,6 +405,13 @@ class SettingsView(BaseView):
         self.about_label.setText(
             f"{APP_NAME_FA} {APP_VERSION}  |  {self.ctx.config.describe()}  |  ساختار: {rev or '—'}"
         )
+        if hasattr(self, "conn_label"):
+            self.conn_label.setText(self.ctx.config.describe())
+
+    def open_connection(self) -> None:
+        from app.ui.connection_dialog import ConnectionDialog
+
+        ConnectionDialog(self.ctx.config, self).exec()
 
     def _selected_currency(self):
         row = self.currency_table.currentRow()
