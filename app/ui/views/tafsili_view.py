@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QInputDialog,
 )
 
 from app.domain.errors import LedgerError
@@ -58,15 +59,24 @@ class TafsiliDialog(QDialog):
             self.extras.addItem(it)
         self.group.setToolTip("گروه اصلی مبنای کد پیشنهادی است. عضویت در گروه‌های دیگر همان رکورد را در چند گزارش نشان می‌دهد.")
         self.extras.setToolTip("گروه اصلی همیشه یکی از گروه‌های عضویت است؛ ردیف آن اینجا به‌صورت انتخاب‌شده و غیرفعال نشان داده می‌شود.")
-        self.linked_meoin = QLabel("—")
-        self.linked_meoin.setWordWrap(True)
+        self.linked_meoin = QListWidget()
+        self.linked_meoin.setSelectionMode(QAbstractItemView.NoSelection)
+        self.linked_meoin.setMinimumHeight(140)
+        self.linked_meoin.setToolTip(
+            "معین‌هایی که گروه اصلی این تفصیلی را می‌پذیرند. تیک‌ها برای همهٔ اعضای همان گروه مشترک است."
+        )
+        for acc in context.refdata.postable:
+            it = QListWidgetItem(acc.display)
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setCheckState(Qt.Unchecked)
+            it.setData(Qt.UserRole, acc.id)
+            self.linked_meoin.addItem(it)
         self.group.currentIndexChanged.connect(self._sync_linked_meoin)
-        self.extras.itemChanged.connect(self._sync_linked_meoin)
         form.addRow("گروه اصلی", combo_with_picker(self.group, "انتخاب گروه"))
         form.addRow("کد", self.code)
         form.addRow("نام", self.name)
         form.addRow("عضویت در گروه‌های دیگر", self.extras)
-        form.addRow("سرفصل‌های معین متصل", self.linked_meoin)
+        form.addRow("معین‌های متصل", self.linked_meoin)
         form.addRow("تلفن", self.phone)
         form.addRow("شناسه ملی", self.nid)
         form.addRow("نشانی", self.address)
@@ -108,14 +118,21 @@ class TafsiliDialog(QDialog):
                 it.setFlags(flags | Qt.ItemIsEnabled)
 
     def _sync_linked_meoin(self) -> None:
-        group_ids = {self.group.currentData()} if self.group.currentData() else set()
-        for i in range(self.extras.count()):
-            it = self.extras.item(i)
+        home = self.group.currentData()
+        linked = {a.id for a in self.ctx.refdata.moein_accounts_for_groups({home} if home else set()) if a.is_postable}
+        self.linked_meoin.blockSignals(True)
+        for i in range(self.linked_meoin.count()):
+            it = self.linked_meoin.item(i)
+            it.setCheckState(Qt.Checked if it.data(Qt.UserRole) in linked else Qt.Unchecked)
+        self.linked_meoin.blockSignals(False)
+
+    def linked_account_ids(self) -> list[int]:
+        ids = []
+        for i in range(self.linked_meoin.count()):
+            it = self.linked_meoin.item(i)
             if it.checkState() == Qt.Checked:
-                group_ids.add(it.data(Qt.UserRole))
-        accounts = self.ctx.refdata.moein_accounts_for_groups(group_ids)
-        names = sorted({f"{a.code} {a.name}" for a in accounts if a.is_postable})
-        self.linked_meoin.setText("، ".join(names) if names else "هیچ سرفصل معینی هنوز این گروه(ها) را نمی‌پذیرد.")
+                ids.append(it.data(Qt.UserRole))
+        return ids
 
     def _suggest(self) -> None:
         if self.item:
@@ -153,6 +170,12 @@ class TafsiliDialog(QDialog):
                     )
                     db.flush()
                     self.created_id = row.id
+                    master_data.set_group_moein_accounts(
+                        db,
+                        group_id=self.group.currentData(),
+                        account_ids=self.linked_account_ids(),
+                        user_id=self.ctx.user_id,
+                    )
                 else:
                     item = db.merge(self.item)
                     master_data.update_tafsili(
@@ -168,6 +191,12 @@ class TafsiliDialog(QDialog):
                         note=self.note.text(),
                         user_id=self.ctx.user_id,
                     )
+                    master_data.set_group_moein_accounts(
+                        db,
+                        group_id=self.group.currentData(),
+                        account_ids=self.linked_account_ids(),
+                        user_id=self.ctx.user_id,
+                    )
             super().accept()
         except LedgerError as exc:
             from PySide6.QtWidgets import QMessageBox
@@ -177,7 +206,7 @@ class TafsiliDialog(QDialog):
 
 class TafsiliView(BaseView):
     title = "تفصیلی شناور"
-    hint = "اشخاص، صندوق‌ها، پروژه‌ها و مراکز هزینه. یک تفصیلی می‌تواند عضو چند گروه باشد."
+    hint = "گروه تفصیلی، اشخاص و پروژه‌ها، و معین‌هایی که هر گروه به آن‌ها وصل است."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
@@ -187,12 +216,15 @@ class TafsiliView(BaseView):
         add = QPushButton("تفصیلی جدید")
         add.setProperty("kind", "primary")
         add.clicked.connect(self.create)
+        add_group = QPushButton("گروه تفصیلی جدید")
+        add_group.clicked.connect(self.create_group)
         edit = QPushButton("ویرایش")
         edit.clicked.connect(self.edit)
         bar.addWidget(QLabel("گروه"))
         bar.addWidget(combo_with_picker(self.filter, "فیلتر گروه"))
         bar.addStretch()
         bar.addWidget(edit)
+        bar.addWidget(add_group)
         bar.addWidget(add)
         self.body.addLayout(bar)
         self.table = QTableWidget(0, 6)
@@ -251,6 +283,24 @@ class TafsiliView(BaseView):
         if TafsiliDialog(self.ctx, self).exec():
             self.ctx.reload_refdata()
             self.refresh()
+
+    def create_group(self) -> None:
+        code, ok = QInputDialog.getText(self, "گروه تفصیلی جدید", "کد گروه:")
+        if not ok or not code.strip():
+            return
+        name, ok = QInputDialog.getText(self, "گروه تفصیلی جدید", "نام گروه:")
+        if not ok or not name.strip():
+            return
+        try:
+            with self.ctx.session() as db:
+                master_data.create_tafsili_group(db, code=code.strip(), name=name.strip(), user_id=self.ctx.user_id)
+            self.ctx.reload_refdata()
+            self.refresh()
+            self.inform("گروه تفصیلی ایجاد شد.")
+        except LedgerError as exc:
+            self.warn(str(exc))
+        except Exception as exc:
+            self.report_error(exc)
 
     def edit(self) -> None:
         tid = self._current_id()

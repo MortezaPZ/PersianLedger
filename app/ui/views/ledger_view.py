@@ -19,6 +19,7 @@ class LedgerView(ReportView):
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.from_date, self.to_date = self.make_date_range()
+        self.attach_account_tafsili_filters()
         self.kind = QComboBox(); self.kind.addItem("دفتر معین", False); self.kind.addItem("دفتر کل", True)
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)

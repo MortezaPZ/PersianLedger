@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import QAbstractTableModel, Qt
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QAbstractItemView, QComboBox, QLabel, QTableView
+from PySide6.QtWidgets import QAbstractItemView, QTableView
 
 from app.domain import money
 from app.export import excel, printing
 from app.services.report_service import StatementFilter, account_statement
 from app.ui import theme
 from app.ui.views.report_base import ReportView
-from app.ui.widgets.pickers import combo_with_picker
 from app.ui.widgets.tables import fit_columns
 
 
@@ -71,10 +70,7 @@ class StatementView(ReportView):
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.from_date, self.to_date = self.make_date_range()
-        self.account = QComboBox(); self.account.setEditable(True)
-        self.tafsili = QComboBox(); self.tafsili.setEditable(True)
-        self.add_filter("سرفصل", combo_with_picker(self.account, "انتخاب سرفصل"))
-        self.add_filter("تفصیلی", combo_with_picker(self.tafsili, "انتخاب تفصیلی"))
+        self.attach_account_tafsili_filters()
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
         self.add_filter("ارزها", self.make_currency_list())
@@ -86,31 +82,23 @@ class StatementView(ReportView):
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.body.addWidget(self.table, 1)
-        self.reload_currencies(); self.reload_groups(); self._fill_lists()
-
-    def _fill_lists(self) -> None:
-        self.account.clear(); self.account.addItem("انتخاب سرفصل", None)
-        for acc in self.ctx.refdata.postable:
-            self.account.addItem(acc.display, acc.id)
-        self.tafsili.clear(); self.tafsili.addItem("همه", None)
-        for item in self.ctx.refdata.tafsilis:
-            self.tafsili.addItem(item.display, item.id)
+        self.reload_currencies(); self.reload_groups()
 
     def refresh(self) -> None:
-        self._fill_lists(); self.reload_currencies(); self.reload_groups()
+        self.fill_linked_filters(); self.reload_currencies(); self.reload_groups()
 
     def run(self) -> None:
-        if not self.account.currentData():
-            self.warn("سرفصل را انتخاب کنید.")
-            return
         kwargs = self.ready_filters()
         if kwargs is None:
+            return
+        if not kwargs.get("account_id") and not kwargs.get("tafsili_any_id"):
+            self.warn("سرفصل یا تفصیلی را انتخاب کنید.")
             return
         try:
             with self.ctx.read_session() as db:
                 self._result = account_statement(
                     db,
-                    StatementFilter(account_id=self.account.currentData(), tafsili_any_id=self.tafsili.currentData(), **kwargs),
+                    StatementFilter(**kwargs),
                 )
             self.model.set_result(self._result)
             fit_columns(self.table)

@@ -53,7 +53,11 @@ class ReportView(BaseView):
         self.summary.setObjectName("SummaryLine")
         self.body.addWidget(self.summary)
         self.include_opening = QCheckBox("نمایش مانده قبل از بازه")
-        self.include_opening.setChecked(True)
+        self.include_opening.setChecked(False)
+        self.include_opening.setToolTip(
+            "اگر روشن باشد، ماندهٔ سندهای قبل از «از تاریخ» هم در ستون افتتاحیه می‌آید. "
+            "برای دیدن فقط گردش همین بازه، خاموش بماند."
+        )
 
     # ------------------------------------------------------------------
     # Filter bar
@@ -210,7 +214,7 @@ class ReportView(BaseView):
     def base_filter_kwargs(self) -> dict:
         groups = self.checked_group_ids()
         currencies = self.checked_currency_ids()
-        return {
+        data = {
             "date_from": getattr(self, "from_date", JalaliDateEdit()).gregorian() if hasattr(self, "from_date") else None,
             "date_to": getattr(self, "to_date", JalaliDateEdit()).gregorian() if hasattr(self, "to_date") else None,
             "currency_ids": currencies or None,
@@ -218,6 +222,78 @@ class ReportView(BaseView):
             "include_drafts": bool(self.drafts_combo.currentData()) if hasattr(self, "drafts_combo") else True,
             "include_opening": self.include_opening.isChecked(),
         }
+        if hasattr(self, "account") and self.account.currentData():
+            data["account_id"] = self.account.currentData()
+        if hasattr(self, "tafsili") and self.tafsili.currentData():
+            data["tafsili_any_id"] = self.tafsili.currentData()
+        return data
+
+    def attach_account_tafsili_filters(self) -> None:
+        """معین و تفصیلی همدیگر را محدود می‌کنند: هر کدام را اول انتخاب کنید."""
+        from app.ui.widgets.pickers import combo_with_picker
+
+        self.account = QComboBox()
+        self.account.setEditable(True)
+        self.tafsili = QComboBox()
+        self.tafsili.setEditable(True)
+        self.account.currentIndexChanged.connect(self._on_linked_account)
+        self.tafsili.currentIndexChanged.connect(self._on_linked_tafsili)
+        self.add_filter("سرفصل", combo_with_picker(self.account, "انتخاب سرفصل"))
+        self.add_filter("تفصیلی", combo_with_picker(self.tafsili, "انتخاب تفصیلی"))
+        self.fill_linked_filters()
+
+    def fill_linked_filters(self) -> None:
+        if not hasattr(self, "account"):
+            return
+        account_id = self.account.currentData() if self.account.count() else None
+        tafsili_id = self.tafsili.currentData() if self.tafsili.count() else None
+        ref = self.ctx.refdata
+        self.account.blockSignals(True)
+        self.account.clear()
+        self.account.addItem("همه", None)
+        accounts = ref.moein_accounts_for_tafsili(tafsili_id) if tafsili_id else ref.postable
+        for acc in accounts:
+            if acc.is_postable:
+                self.account.addItem(acc.display, acc.id)
+        self.account.setCurrentIndex(max(0, self.account.findData(account_id)))
+        self.account.blockSignals(False)
+        self.tafsili.blockSignals(True)
+        self.tafsili.clear()
+        self.tafsili.addItem("همه", None)
+        current_account = self.account.currentData()
+        items = ref.tafsilis_for_account(current_account) if current_account else [t for t in ref.tafsilis if t.is_active]
+        for item in items:
+            self.tafsili.addItem(item.display, item.id)
+        self.tafsili.setCurrentIndex(max(0, self.tafsili.findData(tafsili_id)))
+        self.tafsili.blockSignals(False)
+
+    def _on_linked_account(self) -> None:
+        account_id = self.account.currentData()
+        current = self.tafsili.currentData()
+        ref = self.ctx.refdata
+        self.tafsili.blockSignals(True)
+        self.tafsili.clear()
+        self.tafsili.addItem("همه", None)
+        items = ref.tafsilis_for_account(account_id) if account_id else [t for t in ref.tafsilis if t.is_active]
+        for item in items:
+            self.tafsili.addItem(item.display, item.id)
+        self.tafsili.setCurrentIndex(max(0, self.tafsili.findData(current)))
+        self.tafsili.blockSignals(False)
+
+    def _on_linked_tafsili(self) -> None:
+        selected = self.tafsili.currentData()
+        current = self.account.currentData()
+        ref = self.ctx.refdata
+        accounts = ref.moein_accounts_for_tafsili(selected) if selected else ref.postable
+        self.account.blockSignals(True)
+        self.account.clear()
+        self.account.addItem("همه", None)
+        for acc in accounts:
+            if acc.is_postable:
+                self.account.addItem(acc.display, acc.id)
+        if current in {a.id for a in accounts if a.is_postable} or (not selected and current):
+            self.account.setCurrentIndex(max(0, self.account.findData(current)))
+        self.account.blockSignals(False)
 
     def run(self) -> None:
         raise NotImplementedError

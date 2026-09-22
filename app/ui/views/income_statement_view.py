@@ -83,6 +83,7 @@ class IncomeStatementView(ReportView):
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.from_date, self.to_date = self.make_date_range()
+        self.attach_account_tafsili_filters()
         self.level = QComboBox()
         for key, label in lr.LEVEL_FA.items():
             if key not in lr.TAFSILI_LEVELS:
@@ -105,8 +106,10 @@ class IncomeStatementView(ReportView):
         self.reload_groups()
 
     def refresh(self) -> None:
+        self.fill_linked_filters()
         self.reload_currencies()
         self.reload_groups()
+        self.run()
 
     def run(self) -> None:
         kwargs = self.ready_filters()

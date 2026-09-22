@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -11,8 +9,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMenu,
     QPushButton,
     QTreeWidget,
@@ -41,19 +37,6 @@ class AccountDialog(QDialog):
         self.nature = QComboBox()
         for item in NATURE_CHOICES:
             self.nature.addItem(ACCOUNT_NATURE_FA[item], item)
-        self.t1_req = QCheckBox("تفصیلی ۱ الزامی است")
-        self.t2_req = QCheckBox("تفصیلی ۲ الزامی است")
-        self.g1 = QListWidget(); self.g2 = QListWidget()
-        for box in (self.g1, self.g2):
-            box.setSelectionMode(QAbstractItemView.NoSelection)
-            box.setMaximumHeight(90)
-        for g in context.refdata.groups:
-            for box in (self.g1, self.g2):
-                it = QListWidgetItem(f"{g.code} {g.name}")
-                it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
-                it.setCheckState(Qt.Unchecked)
-                it.setData(Qt.UserRole, g.id)
-                box.addItem(it)
         self.type = QComboBox()
         for item, label in ACCOUNT_TYPE_FA.items():
             self.type.addItem(label, item)
@@ -62,10 +45,6 @@ class AccountDialog(QDialog):
         if parent_account is None and account is None:
             form.addRow("نوع", self.type)
         form.addRow("ماهیت", self.nature)
-        form.addRow(self.t1_req)
-        form.addRow("گروه‌های مجاز تفصیلی ۱", self.g1)
-        form.addRow(self.t2_req)
-        form.addRow("گروه‌های مجاز تفصیلی ۲", self.g2)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         fields.localize_dialog_buttons(buttons)
         buttons.accepted.connect(self.accept)
@@ -77,23 +56,6 @@ class AccountDialog(QDialog):
             idx = self.nature.findData(normalize_nature(account.nature))
             if idx >= 0:
                 self.nature.setCurrentIndex(idx)
-            self.t1_req.setChecked(account.tafsili1_required)
-            self.t2_req.setChecked(account.tafsili2_required)
-            allowed = {(r.tafsili_group_id, r.slot) for r in account.tafsili_rules}
-            for i in range(self.g1.count()):
-                if (self.g1.item(i).data(Qt.UserRole), 1) in allowed:
-                    self.g1.item(i).setCheckState(Qt.Checked)
-                if (self.g2.item(i).data(Qt.UserRole), 2) in allowed:
-                    self.g2.item(i).setCheckState(Qt.Checked)
-
-    def rules(self) -> list[tuple[int, int]]:
-        out = []
-        for i in range(self.g1.count()):
-            if self.g1.item(i).checkState() == Qt.Checked:
-                out.append((self.g1.item(i).data(Qt.UserRole), 1))
-            if self.g2.item(i).checkState() == Qt.Checked:
-                out.append((self.g2.item(i).data(Qt.UserRole), 2))
-        return out
 
     def accept(self) -> None:
         try:
@@ -112,9 +74,6 @@ class AccountDialog(QDialog):
                         group_id=group_id,
                         account_type=kind,
                         nature=self.nature.currentData(),
-                        tafsili1_required=self.t1_req.isChecked(),
-                        tafsili2_required=self.t2_req.isChecked(),
-                        tafsili_rules=self.rules(),
                         user_id=self.ctx.user_id,
                     )
                 else:
@@ -124,9 +83,6 @@ class AccountDialog(QDialog):
                         code=self.code.text(),
                         name=self.name.text(),
                         nature=self.nature.currentData(),
-                        tafsili1_required=self.t1_req.isChecked(),
-                        tafsili2_required=self.t2_req.isChecked(),
-                        tafsili_rules=self.rules(),
                         user_id=self.ctx.user_id,
                     )
             super().accept()
@@ -137,7 +93,7 @@ class AccountDialog(QDialog):
 
 class AccountsView(BaseView):
     title = "درخت سرفصل‌ها"
-    hint = "گروه ← کل ← معین ← تفصیلی۱ و ۲. دابل‌کلیک یا دکمه ویرایش برای تغییر."
+    hint = "فقط تا سطح معین. تفصیلی و اتصال آن به معین از منوی تفصیلی شناور است."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
@@ -169,17 +125,8 @@ class AccountsView(BaseView):
     def reload(self) -> None:
         self.tree.clear()
         with self.ctx.read_session() as db:
-            from sqlalchemy import select
-            from sqlalchemy.orm import selectinload
-            from app.db.models import Tafsili
-
             groups = account_service.account_groups(db)
             accounts = account_service.all_accounts(db, include_inactive=True)
-            tafsilis = list(
-                db.execute(
-                    select(Tafsili).options(selectinload(Tafsili.memberships), selectinload(Tafsili.group))
-                ).scalars()
-            )
         by_parent = {}
         for acc in accounts:
             by_parent.setdefault(acc.parent_id, []).append(acc)
@@ -198,22 +145,7 @@ class AccountsView(BaseView):
                 moin = QTreeWidgetItem([child.display, ACCOUNT_NATURE_FA.get(normalize_nature(child.nature), ""), "معین" if child.is_active else "غیرفعال"])
                 moin.setData(0, Qt.UserRole, ("account", child.id))
                 kol.addChild(moin)
-                by_slot: dict[int, list[int]] = {1: [], 2: []}
-                for rule in child.tafsili_rules:
-                    by_slot.setdefault(rule.slot, []).append(rule.tafsili_group_id)
-                for slot in (1, 2):
-                    gids = set(by_slot.get(slot) or [])
-                    if not gids:
-                        continue
-                    slot_node = QTreeWidgetItem([f"تفصیلی {slot}", "", "خانه سند"])
-                    slot_node.setData(0, Qt.UserRole, ("slot", child.id))
-                    moin.addChild(slot_node)
-                    for item in tafsilis:
-                        if item.group_ids & gids:
-                            leaf = QTreeWidgetItem([item.display, item.group.name if item.group else "", "تفصیلی"])
-                            leaf.setData(0, Qt.UserRole, ("tafsili", item.id))
-                            slot_node.addChild(leaf)
-        self.tree.expandToDepth(2)
+        self.tree.expandToDepth(1)
 
     def _current_payload(self):
         item = self.tree.currentItem()
@@ -273,18 +205,6 @@ class AccountsView(BaseView):
         kind, ident = self._current_payload()
         if kind == "group":
             self.warn("گروه حساب از نوع دارایی/بدهی است و از همین‌جا ویرایش نمی‌شود. کل یا معین را انتخاب کنید.")
-            return
-        if kind == "slot":
-            self.warn("خانه تفصیلی را از ویرایش معین تنظیم کنید.")
-            return
-        if kind == "tafsili":
-            from app.db.models import Tafsili
-            from app.ui.views.tafsili_view import TafsiliDialog
-            with self.ctx.read_session() as db:
-                item = db.get(Tafsili, ident)
-            if item and TafsiliDialog(self.ctx, self, item=item).exec():
-                self.ctx.reload_refdata()
-                self.reload()
             return
         acc = self._current_account()
         if not acc:

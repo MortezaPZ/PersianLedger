@@ -47,6 +47,16 @@ class RefData:
             return False
         return account.tafsili1_required if slot == 1 else account.tafsili2_required
 
+    def tafsilis_for_account(self, account_id: int | None) -> list[Tafsili]:
+        """تفصیلی rows allowed on this معین, either document slot."""
+        if not account_id:
+            return [t for t in self.tafsilis if t.is_active]
+        seen: dict[int, Tafsili] = {}
+        for slot in (1, 2):
+            for item in self.tafsilis_for(account_id, slot):
+                seen[item.id] = item
+        return list(seen.values())
+
     def tafsilis_for(self, account_id: int | None, slot: int) -> list[Tafsili]:
         account = self.account_by_id.get(account_id or 0)
         if account is None:
@@ -55,6 +65,16 @@ class RefData:
         if not allowed:
             return []
         return [t for t in self.tafsilis if t.is_active and t.group_ids & allowed]
+
+    def tafsilis_for_account(self, account_id: int | None) -> list[Tafsili]:
+        """تفصیلی‌های مجاز روی این معین، در هر خانهٔ سند."""
+        if not account_id:
+            return [t for t in self.tafsilis if t.is_active]
+        seen: dict[int, Tafsili] = {}
+        for slot in (1, 2):
+            for item in self.tafsilis_for(account_id, slot):
+                seen[item.id] = item
+        return list(seen.values())
 
     def moein_accounts_for_groups(self, group_ids: set[int]) -> list[Account]:
         """معین accounts whose تفصیلی rules accept any of the given تفصیلی groups."""
@@ -65,6 +85,10 @@ class RefData:
             if any(r.tafsili_group_id in group_ids for r in account.tafsili_rules):
                 out.append(account)
         return out
+
+    def moein_accounts_for_tafsili(self, tafsili_id: int | None) -> list[Account]:
+        item = self.tafsili_by_id.get(tafsili_id or 0)
+        return self.moein_accounts_for_groups(item.group_ids if item else set())
 
     def currencies_for(self, account_id: int | None) -> list[Currency]:
         account = self.account_by_id.get(account_id or 0)

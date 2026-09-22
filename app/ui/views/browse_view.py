@@ -47,6 +47,7 @@ class BrowseView(ReportView):
         self._level = lr.LEVEL_GROUP
         self._trail: list[tuple[int, str, str]] = []
         self.from_date, self.to_date = self.make_date_range()
+        self.attach_account_tafsili_filters()
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
         self.add_filter("ارزها", self.make_currency_list())
@@ -134,6 +135,9 @@ class BrowseView(ReportView):
 
         self.summary.setObjectName("SummaryLine")
         self.reload_currencies()
+        self.from_date.dateChanged.connect(self.run)
+        self.to_date.dateChanged.connect(self.run)
+        self.include_opening.toggled.connect(self.run)
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.table and event.type() == QEvent.KeyPress:
@@ -143,6 +147,7 @@ class BrowseView(ReportView):
         return super().eventFilter(obj, event)
 
     def refresh(self) -> None:
+        self.fill_linked_filters()
         self.reload_currencies()
         self.run()
 

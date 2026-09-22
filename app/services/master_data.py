@@ -160,6 +160,86 @@ def tafsili_groups(session: Session, only_active: bool = False) -> list[TafsiliG
     return list(session.execute(stmt.order_by(TafsiliGroup.code)).scalars())
 
 
+def set_group_moein_accounts(
+    session: Session,
+    *,
+    group_id: int,
+    account_ids: list[int],
+    user_id: int | None = None,
+) -> None:
+    """Which معین accounts accept this تفصیلی group, in both document slots.
+
+    The link lives on the group, so every تفصیلی in that group can be posted
+    on the chosen معین accounts. Editing it belongs on the تفصیلی screen.
+    """
+    from app.db.models import AccountTafsiliRule
+
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
+    wanted = set(account_ids)
+    rules = list(
+        session.execute(
+            select(AccountTafsiliRule).where(AccountTafsiliRule.tafsili_group_id == group_id)
+        ).scalars()
+    )
+    by_account: dict[int, list] = {}
+    for rule in rules:
+        by_account.setdefault(rule.account_id, []).append(rule)
+    for account_id, rows in by_account.items():
+        if account_id not in wanted:
+            for rule in rows:
+                session.delete(rule)
+    for account_id in wanted:
+        have = {rule.slot for rule in by_account.get(account_id, [])}
+        for slot in (1, 2):
+            if slot not in have:
+                session.add(
+                    AccountTafsiliRule(account_id=account_id, tafsili_group_id=group_id, slot=slot)
+                )
+    session.flush()
+    audit.record(
+        session,
+        entity_type="TafsiliGroup",
+        action=AuditAction.UPDATE,
+        entity_id=group_id,
+        user_id=user_id,
+        after={"moein_ids": sorted(wanted)},
+    )
+
+
+def set_group_moein_accounts(
+    session: Session,
+    *,
+    group_id: int,
+    account_ids: list[int],
+    user_id: int | None = None,
+) -> None:
+    """Which معین accounts accept this تفصیلی group, in both document slots."""
+    from app.db.models import AccountTafsiliRule
+
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
+    wanted = {int(i) for i in account_ids}
+    rules = list(
+        session.execute(
+            select(AccountTafsiliRule).where(AccountTafsiliRule.tafsili_group_id == group_id)
+        ).scalars()
+    )
+    by_account: dict[int, list] = {}
+    for rule in rules:
+        by_account.setdefault(rule.account_id, []).append(rule)
+    for account_id, rows in by_account.items():
+        if account_id not in wanted:
+            for rule in rows:
+                session.delete(rule)
+    for account_id in wanted:
+        have = {rule.slot for rule in by_account.get(account_id, [])}
+        for slot in (1, 2):
+            if slot not in have:
+                session.add(
+                    AccountTafsiliRule(account_id=account_id, tafsili_group_id=group_id, slot=slot)
+                )
+    session.flush()
+
+
 def create_tafsili_group(session: Session, *, code: str, name: str, user_id: int | None = None) -> TafsiliGroup:
     auth_service.require(session, user_id, Perm.MASTER_EDIT)
     code = (code or "").strip()

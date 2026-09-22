@@ -70,6 +70,7 @@ class JournalView(ReportView):
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
         self.from_date, self.to_date = self.make_date_range()
+        self.attach_account_tafsili_filters()
         self.add_filter("از تاریخ", self.from_date)
         self.add_filter("تا تاریخ", self.to_date)
         self.add_filter("ارزها", self.make_currency_list())
@@ -83,7 +84,7 @@ class JournalView(ReportView):
         self.reload_currencies(); self.reload_groups()
 
     def refresh(self) -> None:
-        self.reload_currencies(); self.reload_groups()
+        self.fill_linked_filters(); self.reload_currencies(); self.reload_groups()
 
     def run(self) -> None:
         try:

@@ -32,9 +32,7 @@ def start(cfg: AppConfig | None = None, with_demo: bool = False) -> Startup:
                 seeded = True
                 if with_demo:
                     seed.seed_demo(session)
-                # The employer asks for this worked example in every round of
-                # feedback, so a plain install has to show it too -- not just --demo.
-                seed.seed_project_example(session)
+                    seed.seed_project_example(session)
             from app.db.models import AttachmentBlob
             from app.services import attachment_service
             from sqlalchemy import func, select

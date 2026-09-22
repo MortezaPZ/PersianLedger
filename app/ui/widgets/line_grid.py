@@ -59,7 +59,7 @@ class LineGridModel(QAbstractTableModel):
         if self.read_only or index.column() == COL_NO:
             return flags
         row = self.rows[index.row()]
-        if index.column() in (COL_T1, COL_T2) and not self.ref.slot_enabled(row.account_id, 1 if index.column() == COL_T1 else 2):
+        if index.column() in (COL_T1, COL_T2) and row.account_id and not self.ref.slot_enabled(row.account_id, 1 if index.column() == COL_T1 else 2):
             return flags
         return flags | Qt.ItemIsEditable
 
@@ -162,6 +162,13 @@ class LineGridModel(QAbstractTableModel):
         allowed = self.ref.currencies_for(account_id)
         if allowed and (row.currency_id is None or row.currency_id not in {c.id for c in allowed}):
             row.currency_id = allowed[0].id
+        for slot in (1, 2):
+            tid = row.tafsili1_id if slot == 1 else row.tafsili2_id
+            if tid and account_id not in {a.id for a in self.ref.moein_accounts_for_tafsili(tid)}:
+                if slot == 1:
+                    row.tafsili1_id = None
+                else:
+                    row.tafsili2_id = None
 
     def add_row(self, copy_currency_from_last: bool = False) -> None:
         row = LineRow()
@@ -250,7 +257,10 @@ class AccountDelegate(PickerDelegate):
     def _fill(self, combo: QComboBox, index: QModelIndex) -> None:
         model: LineGridModel = index.model()
         combo.addItem("", None)
-        for acc in model.ref.postable:
+        row = model.rows[index.row()]
+        selected = row.tafsili1_id or row.tafsili2_id
+        accounts = model.ref.moein_accounts_for_tafsili(selected) if selected else model.ref.postable
+        for acc in accounts:
             combo.addItem(acc.display, acc.id)
         current = model.rows[index.row()].account_id
         if current:
@@ -267,15 +277,12 @@ class TafsiliDelegate(PickerDelegate):
     def _fill(self, combo: QComboBox, index: QModelIndex) -> None:
         model: LineGridModel = index.model()
         row = model.rows[index.row()]
-        if not row.account_id:
-            combo.addItem("ابتدا سرفصل را انتخاب کنید", None)
-            return
-        if not model.ref.slot_enabled(row.account_id, self.slot):
+        if row.account_id and not model.ref.slot_enabled(row.account_id, self.slot):
             combo.addItem("تعریف نشده — کلیک کنید", None)
             self.requestConfigure.emit(index.row(), self.slot)
             return
         combo.addItem("", None)
-        items = model.ref.tafsilis_for(row.account_id, self.slot)
+        items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.tafsilis
         for item in items:
             combo.addItem(item.display, item.id)
         combo.addItem(NEW_TAFSILI_LABEL, NEW_TAFSILI)

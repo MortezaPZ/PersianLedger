@@ -56,7 +56,7 @@ def test_dialog_buttons_are_persian(qapp, tmp_path):
         dialog.close()
 
 
-def test_accounts_tree_lists_tafsili_leaves(qapp, tmp_path):
+def test_accounts_tree_stops_at_moin(qapp, tmp_path):
     ctx = _ctx(tmp_path)
     view = AccountsView(ctx)
     labels = set()
@@ -68,7 +68,28 @@ def test_accounts_tree_lists_tafsili_leaves(qapp, tmp_path):
 
     for i in range(view.tree.topLevelItemCount()):
         walk(view.tree.topLevelItem(i))
-    assert "تفصیلی" in labels
+    assert "تفصیلی" not in labels
+    assert "معین" in labels
+
+
+def test_accounts_tree_defaults_to_moin_without_tafsili(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    view = AccountsView(ctx)
+
+    def visible_kinds(item, parent_expanded: bool) -> list[str]:
+        kinds = []
+        if parent_expanded:
+            kinds.append((item.data(0, Qt.UserRole) or (None,))[0])
+            for i in range(item.childCount()):
+                kinds.extend(visible_kinds(item.child(i), item.isExpanded()))
+        return kinds
+
+    seen = []
+    for i in range(view.tree.topLevelItemCount()):
+        seen.extend(visible_kinds(view.tree.topLevelItem(i), True))
+    assert "account" in seen
+    assert "tafsili" not in seen
+    assert "slot" not in seen
 
 
 def test_jalali_calendar_pick_sets_date(qapp):
@@ -264,7 +285,12 @@ def test_tafsili_dialog_shows_home_group_as_membership_and_linked_meoin(qapp, tm
     )
     assert home_row.checkState() == Qt.Checked
     assert not (home_row.flags() & Qt.ItemIsEnabled)
-    assert dialog.linked_meoin.text() != "—"
+    checked = [
+        dialog.linked_meoin.item(i).text()
+        for i in range(dialog.linked_meoin.count())
+        if dialog.linked_meoin.item(i).checkState() == Qt.Checked
+    ]
+    assert checked
     dialog.close()
 
 
@@ -417,21 +443,30 @@ def test_accounts_tree_edit_loads_kol_and_moin(qapp, tmp_path):
         dialog.close()
 
 
-def test_project_example_is_seeded_without_demo_flag(qapp, tmp_path):
-    from app.db.models import Document, DocumentLine, Tafsili
+def test_browse_date_range_without_opening_hides_prior(qapp, tmp_path):
+    from app.ui.views.browse_view import BrowseView
+
+    ctx = _ctx(tmp_path)
+    view = BrowseView(ctx)
+    assert view.include_opening.isChecked() is False
+    year = next(y for y in ctx.fiscal_years() if y.id == ctx.fiscal_year_id)
+    view.from_date.setText(year.end_date_j)
+    view.to_date.setText(year.end_date_j)
+    view.run()
+    assert view._result.is_empty
+    view.include_opening.setChecked(True)
+    assert not view._result.is_empty
+
+
+def test_plain_install_has_no_sample_documents(qapp, tmp_path):
+    from app.db.models import Document
 
     data = tmp_path / "plain"
     data.mkdir(parents=True, exist_ok=True)
     cfg = config_module.AppConfig(data_dir=data, sqlite_path=data / "ledger.sqlite3")
-    ctx = AppContext(bootstrap.start(cfg))  # no with_demo
+    ctx = AppContext(bootstrap.start(cfg))
     with ctx.read_session() as db:
-        descriptions = [d.description for d in db.query(Document).all()]
-        assert any("پروژه A" in d for d in descriptions), descriptions
-        person = db.query(Tafsili).filter(Tafsili.code == "2106").one()
-        assert len(person.group_ids) == 2, "نفر A must sit in both اشخاص and صندوق‌ها"
-        cash = db.query(DocumentLine).filter(DocumentLine.description.like("%نفر A%")).one()
-        assert cash.tafsili1_id == person.id
-        assert db.get(Tafsili, cash.tafsili2_id).code == "3105"
+        assert db.query(Document).count() == 0
 
 
 def test_income_statement_reports_net_result(qapp, tmp_path):
