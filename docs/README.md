@@ -34,8 +34,9 @@ Nothing else is required — Python, Qt and the Persian font are inside both.
 Portable mode is switched on by the `portable.txt` file next to the executable, which
 only the ZIP build ships. Delete that file and the folder behaves like an installed copy.
 
-**Updating.** Install the new version over the old one — or, for the portable build,
-extract the new ZIP and copy the old `data` folder next to the new executable. The
+**Updating.** Install the new version over the old one. For the portable build, extract
+the new ZIP somewhere else and run `packaging/update_portable.ps1 -InstallDir <current> -UpdateDir <new>`.
+The script replaces `PersianLedger.exe` and `_internal` and does not copy or delete `data`. The
 installer never touches `C:\ProgramData\PersianLedger`; this was verified by installing,
 posting a document, reinstalling over the top and uninstalling — the ledger survived all
 three. On the first launch after an update the app compares

@@ -150,7 +150,29 @@ def restore(engine: Engine, cfg: AppConfig, source: Path, user_id: int | None = 
     except sqlite3.DatabaseError as exc:
         _put_safety_back(live, safety)
         raise BackupError("فایل پشتیبان آسیب‌دیده است؛ دیتابیس قبلی دست‌نخورده ماند.") from exc
+    _upgrade_restored_file(cfg, live, safety)
     return RestoreResult(safety, documents, posted, accounts, tafsilis)
+
+
+def _upgrade_restored_file(cfg: AppConfig, live: Path, safety: Path) -> None:
+    """Bring an older backup up to the schema this build understands.
+
+    If that migration fails, the database that was live before the restore is
+    put back. The caller must not be left on a half-upgraded file.
+    """
+    from app.db import engine as engine_module
+    from app.db import migrate
+
+    fresh = engine_module.build_engine(cfg.database_url())
+    try:
+        migrate.upgrade_to_head(fresh, cfg)
+    except Exception as exc:
+        fresh.dispose()
+        _put_safety_back(live, safety)
+        raise BackupError(
+            "به‌روزرسانی ساختار فایل پشتیبان انجام نشد؛ دیتابیس قبلی دست‌نخورده ماند."
+        ) from exc
+    fresh.dispose()
 
 
 def _put_safety_back(live: Path, safety: Path) -> None:

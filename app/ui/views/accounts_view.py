@@ -9,6 +9,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMenu,
     QPushButton,
     QTreeWidget,
@@ -17,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from app.domain.enums import ACCOUNT_NATURE_FA, ACCOUNT_TYPE_FA, NATURE_CHOICES, AccountType, normalize_nature
 from app.domain.errors import LedgerError
-from app.services import account_service
+from app.services import account_service, master_data
 from app.ui.views.base_view import BaseView
 from app.ui.widgets import fields
 from app.version import APP_NAME_FA
@@ -91,9 +93,59 @@ class AccountDialog(QDialog):
             QMessageBox.warning(self, APP_NAME_FA, str(exc))
 
 
+class LinkTafsiliDialog(QDialog):
+    """Tick the تفصیلی groups that this معین accepts, in both document slots."""
+
+    def __init__(self, context, account, parent=None) -> None:
+        super().__init__(parent)
+        self.ctx = context
+        self.account = account
+        self.setWindowTitle("اتصال تفصیلی")
+        self.setLayoutDirection(Qt.RightToLeft)
+        form = QFormLayout(self)
+        self.caption = QLineEdit(account.display)
+        self.caption.setReadOnly(True)
+        form.addRow("معین", self.caption)
+        self.groups = QListWidget()
+        linked = {rule.tafsili_group_id for rule in account.tafsili_rules}
+        for group in context.refdata.groups:
+            item = QListWidgetItem(f"{group.code} {group.name}")
+            item.setData(Qt.UserRole, group.id)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if group.id in linked else Qt.Unchecked)
+            self.groups.addItem(item)
+        form.addRow(self.groups)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        fields.localize_dialog_buttons(buttons)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def accept(self) -> None:
+        chosen = []
+        for row in range(self.groups.count()):
+            item = self.groups.item(row)
+            if item.checkState() == Qt.Checked:
+                chosen.append(item.data(Qt.UserRole))
+        rules = [(group_id, slot) for group_id in chosen for slot in (1, 2)]
+        try:
+            with self.ctx.session() as db:
+                from app.db.models import Account
+
+                account = db.get(Account, self.account.id)
+                if account is None:
+                    raise LedgerError("معین پیدا نشد.")
+                account_service.update(db, account, tafsili_rules=rules, user_id=self.ctx.user_id)
+            super().accept()
+        except LedgerError as exc:
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(self, APP_NAME_FA, str(exc))
+
+
 class AccountsView(BaseView):
     title = "درخت سرفصل‌ها"
-    hint = "فقط تا سطح معین. تفصیلی و اتصال آن به معین از منوی تفصیلی شناور است."
+    hint = "کل و معین اینجاست. گروه تفصیلی را زیر معین وصل کنید. خود تفصیلی در صفحه تفصیلی شناور ساخته می‌شود."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
@@ -101,7 +153,8 @@ class AccountsView(BaseView):
         kol = QPushButton("کل جدید"); kol.clicked.connect(self.add_kol)
         moin = QPushButton("معین جدید"); moin.setProperty("kind", "primary"); moin.clicked.connect(self.add_moin)
         edit = QPushButton("ویرایش"); edit.clicked.connect(self.edit)
-        bar.addWidget(kol); bar.addWidget(moin); bar.addWidget(edit); bar.addStretch()
+        link = QPushButton("اتصال تفصیلی"); link.clicked.connect(self.link_tafsili)
+        bar.addWidget(kol); bar.addWidget(moin); bar.addWidget(edit); bar.addWidget(link); bar.addStretch()
         self.body.addLayout(bar)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["کد / عنوان", "نوع", "وضعیت"])
@@ -127,6 +180,7 @@ class AccountsView(BaseView):
         with self.ctx.read_session() as db:
             groups = account_service.account_groups(db)
             accounts = account_service.all_accounts(db, include_inactive=True)
+            tafsili_groups = {g.id: g for g in master_data.tafsili_groups(db)}
         by_parent = {}
         for acc in accounts:
             by_parent.setdefault(acc.parent_id, []).append(acc)
@@ -145,6 +199,14 @@ class AccountsView(BaseView):
                 moin = QTreeWidgetItem([child.display, ACCOUNT_NATURE_FA.get(normalize_nature(child.nature), ""), "معین" if child.is_active else "غیرفعال"])
                 moin.setData(0, Qt.UserRole, ("account", child.id))
                 kol.addChild(moin)
+                linked = sorted({rule.tafsili_group_id for rule in child.tafsili_rules})
+                for group_id in linked:
+                    group = tafsili_groups.get(group_id)
+                    if group is None:
+                        continue
+                    node = QTreeWidgetItem([f"{group.code} {group.name}", "", "متصل"])
+                    node.setData(0, Qt.UserRole, ("link", child.id, group_id))
+                    moin.addChild(node)
         self.tree.expandToDepth(1)
 
     def _current_payload(self):
@@ -182,11 +244,66 @@ class AccountsView(BaseView):
             )
 
     def _menu(self, pos) -> None:
+        item = self.tree.itemAt(pos)
+        if item is not None:
+            self.tree.setCurrentItem(item)
         menu = QMenu(self)
         menu.addAction("کل جدید", self.add_kol)
         menu.addAction("معین جدید", self.add_moin)
         menu.addAction("ویرایش", self.edit)
+        menu.addAction("اتصال تفصیلی", self.link_tafsili)
+        if self._current_payload()[0] == "link":
+            menu.addAction("قطع اتصال", self.unlink_tafsili)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _selected_moein(self):
+        kind, ident = self._current_payload()
+        if kind == "link":
+            return self._load_account(ident)
+        if kind == "account":
+            account = self._load_account(ident)
+            if account and account.level == 2:
+                return account
+        return None
+
+    def link_tafsili(self) -> None:
+        account = self._selected_moein()
+        if account is None:
+            self.warn("یک معین را انتخاب کنید.")
+            return
+        if LinkTafsiliDialog(self.ctx, account, self).exec():
+            self.ctx.reload_refdata()
+            self.reload()
+
+    def unlink_tafsili(self) -> None:
+        item = self.tree.currentItem()
+        data = item.data(0, Qt.UserRole) if item else None
+        if not data or data[0] != "link":
+            self.warn("یک اتصال تفصیلی را انتخاب کنید.")
+            return
+        _, account_id, group_id = data
+        account_id = int(account_id)
+        group_id = int(group_id)
+        account = self._load_account(account_id)
+        if account is None:
+            return
+        rules = [
+            (rule.tafsili_group_id, rule.slot)
+            for rule in account.tafsili_rules
+            if rule.tafsili_group_id != group_id
+        ]
+        try:
+            with self.ctx.session() as db:
+                from app.db.models import Account
+
+                current = db.get(Account, account_id)
+                if current is None:
+                    return
+                account_service.update(db, current, tafsili_rules=rules, user_id=self.ctx.user_id)
+            self.ctx.reload_refdata()
+            self.reload()
+        except LedgerError as exc:
+            self.warn(str(exc))
 
     def add_kol(self) -> None:
         if AccountDialog(self.ctx, self).exec():
@@ -205,6 +322,9 @@ class AccountsView(BaseView):
         kind, ident = self._current_payload()
         if kind == "group":
             self.warn("گروه حساب از نوع دارایی/بدهی است و از همین‌جا ویرایش نمی‌شود. کل یا معین را انتخاب کنید.")
+            return
+        if kind == "link":
+            self.link_tafsili()
             return
         acc = self._current_account()
         if not acc:

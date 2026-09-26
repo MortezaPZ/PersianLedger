@@ -336,6 +336,13 @@ class SettingsView(BaseView):
         self.backup_table.setHorizontalHeaderLabels(["فایل", "حجم", "تاریخ"])
         layout.addWidget(self.backup_table)
         self.body.addWidget(box)
+        if self.ctx.is_admin and self.ctx.config.is_server():
+            home_box = QGroupBox("افزودن کار خانه")
+            home_layout = QVBoxLayout(home_box)
+            home_btn = QPushButton("افزودن کار خانه…")
+            home_btn.clicked.connect(self.merge_home)
+            home_layout.addWidget(home_btn)
+            self.body.addWidget(home_box)
         if self.ctx.is_admin and not self.ctx.config.is_server():
             mig_box = QGroupBox("انتقال به سرور")
             mig_layout = QVBoxLayout(mig_box)
@@ -539,6 +546,24 @@ class SettingsView(BaseView):
             self.reload()
         except LedgerError as exc:
             self.warn(str(exc))
+
+    def merge_home(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "فایل کار خانه", str(self.ctx.config.backup_dir), "پشتیبان (*.sqlite3)")
+        if not path:
+            return
+        if not self.confirm("سندها و کدینگ جدید این فایل به دیتابیس شرکت اضافه می‌شود. دادهٔ فعلی شرکت پاک نمی‌شود. ادامه می‌دهید؟"):
+            return
+        try:
+            from app.services.home_merge import merge_home_file
+
+            report = merge_home_file(Path(path), self.ctx.config, user_id=self.ctx.user_id)
+            self.ctx.reset_caches()
+            self.ctx.dataChanged.emit()
+            self.inform(report.summary_fa())
+        except LedgerError as exc:
+            self.warn(str(exc))
+        except Exception as exc:
+            self.report_error(exc)
 
     def migrate_to_postgres(self) -> None:
         from PySide6.QtWidgets import QDialog, QProgressDialog

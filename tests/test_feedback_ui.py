@@ -4,19 +4,20 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialogButtonBox
+from PySide6.QtWidgets import QDialogButtonBox, QTreeWidget
 
 from app import bootstrap, config as config_module
+from app.db.models import Account
 from app.domain import jalali
-from app.services import document_service, master_data
+from app.services import account_service, document_service, master_data
 from app.ui.context import AppContext
-from app.ui.views.accounts_view import AccountDialog, AccountsView
+from app.ui.views.accounts_view import AccountDialog, AccountsView, LinkTafsiliDialog
 from app.ui.views.document_entry_view import DocumentEntryView
 from app.ui.views.settings_view import SettingsView
 from app.ui.views.trial_balance_view import TrialBalanceView
 from app.ui.views.tafsili_view import TafsiliDialog
 from app.ui.widgets.jalali_date_edit import JalaliDateEdit
-from app.ui.widgets.line_grid import COL_T2, LineRow
+from app.ui.widgets.line_grid import COL_T2, LineRow, COL_T1, LineGridModel, fill_linked_moein_tree
 
 
 def _ctx(tmp_path):
@@ -90,6 +91,145 @@ def test_accounts_tree_defaults_to_moin_without_tafsili(qapp, tmp_path):
     assert "account" in seen
     assert "tafsili" not in seen
     assert "slot" not in seen
+
+
+def test_accounts_tree_lists_linked_tafsili_group(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    view = AccountsView(ctx)
+    moein = ctx.refdata.postable[0]
+    group = ctx.refdata.groups[0]
+    dialog = LinkTafsiliDialog(ctx, moein)
+    for row in range(dialog.groups.count()):
+        item = dialog.groups.item(row)
+        item.setCheckState(Qt.Checked if item.data(Qt.UserRole) == group.id else Qt.Unchecked)
+    dialog.accept()
+    ctx.reload_refdata()
+    view.reload()
+    labels = set()
+
+    def walk(item):
+        labels.add(item.text(0))
+        role = item.data(0, Qt.UserRole)
+        if role and role[0] == "link":
+            labels.add("link")
+        for i in range(item.childCount()):
+            walk(item.child(i))
+
+    for i in range(view.tree.topLevelItemCount()):
+        walk(view.tree.topLevelItem(i))
+    assert "link" in labels
+    assert f"{group.code} {group.name}" in labels
+    dialog.close()
+
+
+def test_tafsili_pick_shows_only_linked_moein(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    moein = ctx.refdata.postable[0]
+    other = ctx.refdata.postable[1]
+    group = ctx.refdata.groups[0]
+    tafsili = next(item for item in ctx.refdata.tafsilis if group.id in item.group_ids)
+    moein_id, other_id, group_id, tafsili_id = moein.id, other.id, group.id, tafsili.id
+    moein_display = moein.display
+    with ctx.session() as db:
+        for account in list(ctx.refdata.postable):
+            rules = [(rule.tafsili_group_id, rule.slot) for rule in account.tafsili_rules if rule.tafsili_group_id != group_id]
+            if account.id == moein_id:
+                rules.extend([(group_id, 1), (group_id, 2)])
+            account_service.update(db, db.get(Account, account.id), tafsili_rules=rules, user_id=None)
+    ctx.reload_refdata()
+    model = LineGridModel(ctx.refdata)
+    model.setData(model.index(0, COL_T1), tafsili_id)
+    assert model.rows[0].account_id == moein_id
+    assert model.rows[0].account_id != other_id
+    tree = QTreeWidget()
+    fill_linked_moein_tree(tree, ctx.refdata, tafsili_id, None)
+    labels = []
+
+    def walk(item):
+        labels.append(item.text(0))
+        for i in range(item.childCount()):
+            walk(item.child(i))
+
+    for i in range(tree.topLevelItemCount()):
+        walk(tree.topLevelItem(i))
+    assert moein_display in labels
+    assert ctx.refdata.account_by_id[other_id].display not in labels
+    assert model.rows[0].tafsili1_id == tafsili_id
+
+
+def test_several_linked_moeins_keep_tafsili_unset_account(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    first = ctx.refdata.postable[0]
+    second = ctx.refdata.postable[1]
+    group = ctx.refdata.groups[0]
+    tafsili = next(item for item in ctx.refdata.tafsilis if group.id in item.group_ids)
+    ids = {first.id, second.id}
+    group_id, tafsili_id = group.id, tafsili.id
+    with ctx.session() as db:
+        for account in list(ctx.refdata.postable):
+            rules = [(rule.tafsili_group_id, rule.slot) for rule in account.tafsili_rules if rule.tafsili_group_id != group_id]
+            if account.id in ids:
+                rules.extend([(group_id, 1), (group_id, 2)])
+            account_service.update(db, db.get(Account, account.id), tafsili_rules=rules, user_id=None)
+    ctx.reload_refdata()
+    model = LineGridModel(ctx.refdata)
+    model.setData(model.index(0, COL_T1), tafsili_id)
+    assert model.rows[0].tafsili1_id == tafsili_id
+    assert model.rows[0].account_id is None
+
+
+def test_unlink_one_group_keeps_the_other(qapp, tmp_path):
+    from PySide6.QtCore import Qt as QtCore
+
+    ctx = _ctx(tmp_path)
+    view = AccountsView(ctx)
+    moein = ctx.refdata.postable[0]
+    groups = ctx.refdata.groups[:2]
+    dialog = LinkTafsiliDialog(ctx, moein)
+    wanted = {g.id for g in groups}
+    for row in range(dialog.groups.count()):
+        item = dialog.groups.item(row)
+        item.setCheckState(QtCore.Checked if item.data(QtCore.UserRole) in wanted else QtCore.Unchecked)
+    dialog.accept()
+    ctx.reload_refdata()
+    view.reload()
+    target = None
+
+    def walk(item):
+        nonlocal target
+        role = item.data(0, QtCore.UserRole)
+        if role and role[0] == "link" and int(role[1]) == moein.id and int(role[2]) == groups[0].id:
+            target = item
+        for i in range(item.childCount()):
+            walk(item.child(i))
+
+    for i in range(view.tree.topLevelItemCount()):
+        walk(view.tree.topLevelItem(i))
+    assert target is not None
+    view.show()
+    qapp.processEvents()
+    view.tree.setCurrentItem(target)
+    qapp.processEvents()
+    assert view.tree.currentItem() is target
+    view.unlink_tafsili()
+    labels = set()
+    moein_node = None
+
+    def find_moein(item):
+        nonlocal moein_node
+        role = item.data(0, QtCore.UserRole)
+        if role and role[0] == "account" and role[1] == moein.id:
+            moein_node = item
+        for i in range(item.childCount()):
+            find_moein(item.child(i))
+
+    for i in range(view.tree.topLevelItemCount()):
+        find_moein(view.tree.topLevelItem(i))
+    assert moein_node is not None
+    for i in range(moein_node.childCount()):
+        labels.add(moein_node.child(i).text(0))
+    assert f"{groups[0].code} {groups[0].name}" not in labels
+    assert f"{groups[1].code} {groups[1].name}" in labels
 
 
 def test_jalali_calendar_pick_sets_date(qapp):
