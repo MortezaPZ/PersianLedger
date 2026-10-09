@@ -95,3 +95,4 @@ import shutil
 _dist = Path(DISTPATH) / "PersianLedger"
 _dist.mkdir(parents=True, exist_ok=True)
 shutil.copy2(ROOT / "portable.txt", _dist / "portable.txt")
+shutil.copy2(ROOT / "packaging" / "update_portable.ps1", _dist / "update_portable.ps1")

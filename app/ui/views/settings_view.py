@@ -257,7 +257,7 @@ class FiscalYearDialog(QDialog):
 
 
 class SettingsView(BaseView):
-    title = "ارزها و سال مالی"
+    title = "تنظیمات پایه"
     hint = "تعریف ارز، سال مالی، پشتیبان‌گیری و بازیابی"
     scrollable = True  # currencies + years + appearance + backups exceed one screen
 

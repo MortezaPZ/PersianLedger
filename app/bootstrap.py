@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlalchemy import Engine
 
@@ -22,6 +23,12 @@ class Startup:
 
 def start(cfg: AppConfig | None = None, with_demo: bool = False) -> Startup:
     cfg = cfg or config_module.load()
+    from app import paths
+
+    if paths.is_frozen() and not paths.is_portable() and cfg.backend == "sqlite":
+        from app.previous_data import default_desktop_roots, recall_previous_data
+
+        recall_previous_data(Path(cfg.data_dir), default_desktop_roots())
     engine = engine_module.init_engine(cfg)
     result = migrate.upgrade_to_head(engine, cfg)
     seeded = False

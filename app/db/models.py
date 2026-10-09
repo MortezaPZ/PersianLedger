@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -95,10 +96,25 @@ class Account(Base):
         CheckConstraint("level IN (1, 2)", name="level_range"),
         Index("ix_accounts_parent_id", "parent_id"),
         Index("ix_accounts_group_id", "group_id"),
+        Index(
+            "uq_accounts_kol_code",
+            "code",
+            unique=True,
+            sqlite_where=text("parent_id IS NULL"),
+            postgresql_where=text("parent_id IS NULL"),
+        ),
+        Index(
+            "uq_accounts_moein_code",
+            "parent_id",
+            "code",
+            unique=True,
+            sqlite_where=text("parent_id IS NOT NULL"),
+            postgresql_where=text("parent_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    code: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
     group_id: Mapped[int | None] = mapped_column(ForeignKey("account_groups.id"))
@@ -128,6 +144,18 @@ class Account(Base):
     @property
     def display(self) -> str:
         return f"{self.code} {self.name}"
+
+    @property
+    def posting_code(self) -> str:
+        """کل code followed by this معین code. The short code may repeat under another کل."""
+        parent = self.parent
+        if self.level == 2 and parent is not None:
+            return f"{parent.code}{self.code}"
+        return self.code
+
+    @property
+    def posting_display(self) -> str:
+        return f"{self.posting_code} {self.name}"
 
 
 class AccountCurrency(Base):
@@ -208,13 +236,14 @@ class AccountTafsiliRule(Base):
 
     __tablename__ = "account_tafsili_rules"
     __table_args__ = (
-        UniqueConstraint("account_id", "tafsili_group_id", "slot"),
+        UniqueConstraint("account_id", "tafsili_group_id", "slot", "tafsili_id"),
         CheckConstraint("slot IN (1, 2)", name="slot_range"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
     tafsili_group_id: Mapped[int] = mapped_column(ForeignKey("tafsili_groups.id"), nullable=False)
+    tafsili_id: Mapped[int | None] = mapped_column(ForeignKey("tafsilis.id"), nullable=True)
     slot: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     account: Mapped[Account] = relationship(back_populates="tafsili_rules")
     group: Mapped[TafsiliGroup] = relationship()

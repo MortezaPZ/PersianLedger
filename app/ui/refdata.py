@@ -61,10 +61,15 @@ class RefData:
         account = self.account_by_id.get(account_id or 0)
         if account is None:
             return []
-        allowed = {r.tafsili_group_id for r in account.tafsili_rules if r.slot == slot}
-        if not allowed:
+        specific = {r.tafsili_id for r in account.tafsili_rules if r.slot == slot and r.tafsili_id}
+        groups = {r.tafsili_group_id for r in account.tafsili_rules if r.slot == slot and not r.tafsili_id}
+        if not specific and not groups:
             return []
-        return [t for t in self.tafsilis if t.is_active and t.group_ids & allowed]
+        return [
+            t
+            for t in self.tafsilis
+            if t.is_active and (t.id in specific or bool(t.group_ids & groups))
+        ]
 
     def tafsilis_for_account(self, account_id: int | None) -> list[Tafsili]:
         """تفصیلی‌های مجاز روی این معین، در هر خانهٔ سند."""
@@ -88,7 +93,21 @@ class RefData:
 
     def moein_accounts_for_tafsili(self, tafsili_id: int | None) -> list[Account]:
         item = self.tafsili_by_id.get(tafsili_id or 0)
-        return self.moein_accounts_for_groups(item.group_ids if item else set())
+        if item is None:
+            return []
+        out = []
+        for account in self.accounts:
+            matched = False
+            for rule in account.tafsili_rules:
+                if rule.tafsili_id:
+                    matched = rule.tafsili_id == item.id
+                else:
+                    matched = rule.tafsili_group_id in item.group_ids
+                if matched:
+                    break
+            if matched:
+                out.append(account)
+        return out
 
     def currencies_for(self, account_id: int | None) -> list[Currency]:
         account = self.account_by_id.get(account_id or 0)

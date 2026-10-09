@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, QSize, Qt
-from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtCore import QSettings, QSize, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -60,7 +60,7 @@ SECTIONS = (
         (
             ("accounts", "درخت سرفصل‌ها", "Ctrl+9", AccountsView),
             ("tafsili", "تفصیلی شناور", "Ctrl+0", TafsiliView),
-            ("settings", "ارزها و سال مالی", "Ctrl+Shift+1", SettingsView),
+            ("settings", "تنظیمات پایه", "Ctrl+Shift+1", SettingsView),
         ),
     ),
     (
@@ -247,6 +247,7 @@ class MainWindow(QMainWindow):
             try:
                 info = backup_service.create(engine_module.get_engine(), self.ctx.config)
                 QMessageBox.information(self, APP_NAME_FA, f"پشتیبان ذخیره شد:\n{info.path}")
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(info.path.parent)))
             except Exception as exc:
                 QMessageBox.warning(self, APP_NAME_FA, str(exc))
                 event.ignore()

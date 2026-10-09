@@ -220,10 +220,14 @@ class TafsiliView(BaseView):
         add_group.clicked.connect(self.create_group)
         edit = QPushButton("ویرایش")
         edit.clicked.connect(self.edit)
+        remove = QPushButton("حذف")
+        remove.setProperty("kind", "danger")
+        remove.clicked.connect(self.delete_current)
         bar.addWidget(QLabel("گروه"))
         bar.addWidget(combo_with_picker(self.filter, "فیلتر گروه"))
         bar.addStretch()
         bar.addWidget(edit)
+        bar.addWidget(remove)
         bar.addWidget(add_group)
         bar.addWidget(add)
         self.body.addLayout(bar)
@@ -301,6 +305,26 @@ class TafsiliView(BaseView):
             self.warn(str(exc))
         except Exception as exc:
             self.report_error(exc)
+
+    def delete_current(self) -> None:
+        tid = self._current_id()
+        if not tid:
+            self.warn("یک تفصیلی را انتخاب کنید.")
+            return
+        if not self.confirm("این تفصیلی حذف شود؟"):
+            return
+        try:
+            with self.ctx.session() as db:
+                from app.db.models import Tafsili
+
+                item = db.get(Tafsili, tid)
+                if item is None:
+                    return
+                master_data.delete_tafsili(db, item, user_id=self.ctx.user_id)
+            self.ctx.reload_refdata()
+            self.refresh()
+        except LedgerError as exc:
+            self.warn(str(exc))
 
     def edit(self) -> None:
         tid = self._current_id()

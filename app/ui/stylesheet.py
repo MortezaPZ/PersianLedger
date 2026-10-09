@@ -104,7 +104,7 @@ QToolTip {{
     border-radius: 10px;
 }}
 /* Plain containers must not paint the canvas colour over a card they sit on. */
-#FilterField, #FilterField > QWidget {{ background: transparent; }}
+#FilterField {{ background: transparent; }}
 #FieldLabel {{
     color: {text_muted};
     font-size: 11px;

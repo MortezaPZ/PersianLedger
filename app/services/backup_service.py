@@ -62,15 +62,18 @@ def create(engine: Engine, cfg: AppConfig, target: Path | None = None, user_id: 
 
     with SASession(engine) as db:
         auth_service.require(db, user_id, Perm.BACKUP)
-    dest = Path(target) if target else cfg.backup_dir / suggested_name()
+    dest = Path(target).resolve() if target else (Path(cfg.backup_dir) / suggested_name()).resolve()
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         dest.unlink()
     try:
         with engine.connect() as connection:
-            connection.execute(text("VACUUM INTO :path"), {"path": str(dest)})
+            escaped = str(dest).replace("'", "''")
+            connection.exec_driver_sql(f"VACUUM INTO '{escaped}'")
     except Exception as exc:
         raise BackupError("ساخت فایل پشتیبان انجام نشد.") from exc
+    if not dest.is_file():
+        raise BackupError(f"فایل پشتیبان در این مسیر ساخته نشد:\n{dest}")
     stat = dest.stat()
     return BackupInfo(dest, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime))
 

@@ -131,10 +131,12 @@ def _check_slot(
         return
     if not slot_rules:
         raise ValidationError(f"ردیف {row}: برای سرفصل «{account.name}» تفصیلی {slot} تعریف نشده است.")
-    allowed = {r.tafsili_group_id for r in slot_rules}
-    if not (tafsili.group_ids & allowed):
+    specific = {r.tafsili_id for r in slot_rules if r.tafsili_id}
+    groups = {r.tafsili_group_id for r in slot_rules if not r.tafsili_id}
+    allowed = tafsili.id in specific or bool(tafsili.group_ids & groups)
+    if not allowed:
         raise ValidationError(
-            f"ردیف {row}: تفصیلی «{tafsili.name}» در هیچ‌یک از گروه‌های مجاز سرفصل «{account.name}» عضو نیست."
+            f"ردیف {row}: تفصیلی «{tafsili.name}» به سرفصل «{account.name}» وصل نیست."
         )
     if not tafsili.is_active:
         raise ValidationError(f"ردیف {row}: تفصیلی «{tafsili.name}» غیرفعال است.")

@@ -207,11 +207,19 @@ def _copy_tafsili_groups(src: Session, dst: Session, report: HomeMergeReport) ->
 
 
 def _copy_accounts(src: Session, dst: Session, report: HomeMergeReport, groups: dict[int, int]) -> dict[int, int]:
-    have = _index(dst, Account, "code")
-    mapping: dict[int, int] = {}
     rows = list(src.execute(select(Account).order_by(Account.level, Account.code)).scalars())
+    src_code = {row.id: row.code for row in rows}
+    have: dict[tuple[str, str], Account] = {}
+    for account in dst.execute(select(Account)).scalars():
+        parent_code = src_code.get(account.parent_id, "")
+        if account.parent_id:
+            parent = dst.get(Account, account.parent_id)
+            parent_code = parent.code if parent else ""
+        have[(parent_code, account.code)] = account
+    mapping: dict[int, int] = {}
     for row in rows:
-        found = have.get(row.code)
+        parent_code = src_code.get(row.parent_id, "") if row.parent_id else ""
+        found = have.get((parent_code, row.code))
         if found is None:
             parent_id = mapping.get(row.parent_id) if row.parent_id else None
             found = Account(
@@ -230,7 +238,7 @@ def _copy_accounts(src: Session, dst: Session, report: HomeMergeReport, groups: 
             )
             dst.add(found)
             dst.flush()
-            have[row.code] = found
+            have[(parent_code, row.code)] = found
             report.created_codes.append(row.code)
         mapping[row.id] = found.id
     return mapping

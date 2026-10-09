@@ -55,14 +55,19 @@ program again. Details are in docs\\deploy-server.md.
 
 Updating
 
-1. Extract the new version into a different folder and close the program.
-2. Run update_portable.ps1 with the current folder and the new folder.
-   That replaces the program files and does not touch data.
-3. Start the program from the same folder as before.
+1. Run the setup file and close the program first.
+2. The install reads data from the previous folder and does not delete it.
+3. Start the program.
 
 Before a database structure change the program writes a backup, then
-updates the structure. Restore an older backup from inside the program.
-Add home-office work to the office database with the home-work action.
+updates the structure. Nothing is lost.
+
+This version:
+1. Setup reads data from the previous folder.
+2. Restore an older backup from basic settings.
+3. The tafsili link attaches the tafsili itself and does not show it in the chart.
+4. Choosing a tafsili does not change or lock the ledger account.
+5. Home-office import is only for the admin, and only on the server.
 Details are in docs\\user-guide.md.
 
 

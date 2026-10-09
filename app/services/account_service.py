@@ -45,7 +45,11 @@ def group_has_accounts(session: Session, group_id: int) -> bool:
 
 
 def all_accounts(session: Session, include_inactive: bool = False) -> list[Account]:
-    stmt = select(Account).options(selectinload(Account.allowed_currencies), selectinload(Account.tafsili_rules))
+    stmt = select(Account).options(
+        selectinload(Account.allowed_currencies),
+        selectinload(Account.tafsili_rules),
+        selectinload(Account.parent),
+    )
     if not include_inactive:
         stmt = stmt.where(Account.is_active.is_(True))
     return list(session.execute(stmt.order_by(Account.code)).scalars())
@@ -72,17 +76,23 @@ def line_count(session: Session, account_id: int) -> int:
     )
 
 
-def _check_code(session: Session, code: str, account_id: int | None = None) -> str:
+def _check_code(session: Session, code: str, account_id: int | None = None, parent_id: int | None = None) -> str:
     code = (code or "").strip()
     if not code:
         raise ValidationError("کد سرفصل الزامی است.")
     if not code.isdigit():
         raise ValidationError("کد سرفصل فقط می‌تواند رقم باشد.")
     stmt = select(Account.id).where(Account.code == code)
+    if parent_id is None:
+        stmt = stmt.where(Account.parent_id.is_(None))
+    else:
+        stmt = stmt.where(Account.parent_id == parent_id)
     if account_id is not None:
         stmt = stmt.where(Account.id != account_id)
     if session.execute(stmt).first():
-        raise ValidationError(f"کد {code} قبلاً استفاده شده است.")
+        if parent_id is None:
+            raise ValidationError(f"کد کل {code} قبلاً استفاده شده است.")
+        raise ValidationError(f"کد معین {code} زیر این کل قبلاً استفاده شده است.")
     return code
 
 
@@ -93,6 +103,36 @@ def _sync_currencies(session: Session, account: Account, currency_ids: list[int]
         return
     for cid in currency_ids:
         account.allowed_currencies.append(AccountCurrency(currency_id=cid))
+
+
+def set_moein_tafsilis(session: Session, account: Account, tafsili_ids: list[int], user_id: int | None = None) -> None:
+    """Link this معین to the chosen تفصیلی rows themselves, in both document slots."""
+    from app.db.models import Tafsili
+
+    auth_service.require(session, user_id, Perm.MASTER_EDIT)
+    account.tafsili_rules.clear()
+    session.flush()
+    for tafsili_id in tafsili_ids:
+        tafsili = session.get(Tafsili, int(tafsili_id))
+        if tafsili is None:
+            continue
+        for slot in (1, 2):
+            account.tafsili_rules.append(
+                AccountTafsiliRule(
+                    tafsili_group_id=tafsili.group_id,
+                    tafsili_id=tafsili.id,
+                    slot=slot,
+                )
+            )
+    session.flush()
+    audit.record(
+        session,
+        entity_type="Account",
+        action=AuditAction.UPDATE,
+        entity_id=account.id,
+        user_id=user_id,
+        after={"tafsili_ids": [int(i) for i in tafsili_ids]},
+    )
 
 
 def _sync_tafsili_rules(session: Session, account: Account, rules: list[tuple[int, int]] | None) -> None:
@@ -121,7 +161,7 @@ def create(
     user_id: int | None = None,
 ) -> Account:
     auth_service.require(session, user_id, Perm.MASTER_EDIT)
-    code = _check_code(session, code)
+    code = _check_code(session, code, parent_id=parent_id)
     name = (name or "").strip()
     if not name:
         raise ValidationError("نام سرفصل الزامی است.")
@@ -184,7 +224,7 @@ def update(
     if code is not None and code != account.code:
         if has_activity(session, account.id):
             raise InUseError("این سرفصل سند دارد؛ کد آن قابل تغییر نیست.")
-        account.code = _check_code(session, code, account.id)
+        account.code = _check_code(session, code, account.id, account.parent_id)
     if name is not None:
         name = name.strip()
         if not name:

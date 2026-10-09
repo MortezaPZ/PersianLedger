@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from PySide6.QtCore import QAbstractTableModel, QEvent, QModelIndex, Qt, Signal
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QComboBox, QCompleter, QStyledItemDelegate, QStyle, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import QComboBox, QCompleter, QStyledItemDelegate, QStyle
 
 from app.domain import money
 from app.ui import theme
@@ -86,11 +86,7 @@ class LineGridModel(QAbstractTableModel):
             return str(position + 1)
         if column == COL_ACCOUNT:
             acc = self.ref.account_by_id.get(row.account_id or 0)
-            if acc:
-                return acc.display
-            if row.tafsili1_id or row.tafsili2_id:
-                return "معین متصل را انتخاب کنید"
-            return ""
+            return acc.posting_display if acc else ""
         if column in (COL_T1, COL_T2):
             slot = 1 if column == COL_T1 else 2
             tid = row.tafsili1_id if slot == 1 else row.tafsili2_id
@@ -134,10 +130,8 @@ class LineGridModel(QAbstractTableModel):
             self._set_account(row, int(value) if value not in (None, "") else None)
         elif column == COL_T1:
             row.tafsili1_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
-            self._apply_single_linked_moein(row)
         elif column == COL_T2:
             row.tafsili2_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
-            self._apply_single_linked_moein(row)
         elif column == COL_CURRENCY:
             row.currency_id = int(value) if value not in (None, "") else None
         elif column in (COL_DEBIT, COL_CREDIT):
@@ -158,16 +152,6 @@ class LineGridModel(QAbstractTableModel):
         self.dataChanged.emit(index, self.index(index.row(), self.columnCount() - 1))
         self.totalsChanged.emit()
         return True
-
-    def _apply_single_linked_moein(self, row: LineRow) -> None:
-        linked = linked_moeins_for_row(self.ref, row.tafsili1_id, row.tafsili2_id)
-        ids = {account.id for account in linked}
-        if len(linked) == 1:
-            self._set_account(row, linked[0].id)
-        elif row.account_id and ids and row.account_id not in ids:
-            row.account_id = None
-        elif row.account_id and row.tafsili1_id and row.tafsili2_id and not ids:
-            row.account_id = None
 
     def _set_account(self, row: LineRow, account_id: int | None) -> None:
         row.account_id = account_id
@@ -254,7 +238,18 @@ class PickerDelegate(QStyledItemDelegate):
 
     def setModelData(self, editor, model, index) -> None:
         combo: QComboBox = editor
-        model.setData(index, combo.currentData())
+        text = (combo.currentText() or "").strip()
+        data = combo.currentData()
+        if text and (data is None or (combo.itemText(combo.currentIndex()) or "").strip() != text):
+            for i in range(combo.count()):
+                label = (combo.itemText(i) or "").strip()
+                if label == text and combo.itemData(i) is not None:
+                    data = combo.itemData(i)
+                    break
+        # Closing the list by clicking elsewhere must not wipe a chosen value.
+        if data is None:
+            return
+        model.setData(index, data)
 
     def _commit(self, editor: QComboBox) -> None:
         self.commitData.emit(editor)
@@ -269,96 +264,30 @@ class PickerDelegate(QStyledItemDelegate):
         return super().editorEvent(event, model, option, index)
 
 
-def linked_moeins(ref: RefData, tafsili_id: int | None) -> list:
-    return [a for a in ref.moein_accounts_for_tafsili(tafsili_id) if a.is_postable and a.is_active]
-
-
-def linked_moeins_for_row(ref: RefData, tafsili1_id: int | None, tafsili2_id: int | None) -> list:
-    """معین accounts that accept every تفصیلی already chosen on the line, in its slot."""
-    chosen: list | None = None
-    for tid, slot in ((tafsili1_id, 1), (tafsili2_id, 2)):
-        if not tid:
-            continue
-        matches = [a for a in linked_moeins(ref, tid) if ref.slot_enabled(a.id, slot)]
-        if not matches:
-            continue
-        if chosen is None:
-            chosen = matches
-        else:
-            ids = {a.id for a in matches}
-            chosen = [a for a in chosen if a.id in ids]
-    return chosen or []
-
-
-def fill_linked_moein_tree(
-    tree: QTreeWidget,
-    ref: RefData,
-    tafsili_id: int | None,
-    current_id: int | None,
-    tafsili2_id: int | None = None,
-) -> None:
-    """Kol as parents, linked معین as the only selectable children."""
-    tree.clear()
-    tree.setHeaderHidden(True)
-    tree.setLayoutDirection(Qt.RightToLeft)
-    by_parent: dict[int | None, list] = {}
-    for account in linked_moeins_for_row(ref, tafsili_id, tafsili2_id):
-        by_parent.setdefault(account.parent_id, []).append(account)
-    current_item = None
-    for parent_id, children in by_parent.items():
-        parent = ref.account_by_id.get(parent_id or 0)
-        label = parent.display if parent else "معین"
-        kol = QTreeWidgetItem([label])
-        kol.setFlags(Qt.ItemIsEnabled)
-        tree.addTopLevelItem(kol)
-        for account in children:
-            node = QTreeWidgetItem([account.display])
-            node.setData(0, Qt.UserRole, account.id)
-            node.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            kol.addChild(node)
-            if account.id == current_id:
-                current_item = node
-        kol.setExpanded(True)
-    if current_item is not None:
-        tree.setCurrentItem(current_item)
-
-
 class AccountDelegate(PickerDelegate):
-    def createEditor(self, parent, option, index):
-        model: LineGridModel = index.model()
-        row = model.rows[index.row()]
-        if row.tafsili1_id or row.tafsili2_id:
-            tree = QTreeWidget(parent)
-            fill_linked_moein_tree(tree, model.ref, row.tafsili1_id, row.account_id, row.tafsili2_id)
-            tree.itemClicked.connect(lambda item, editor=tree: self._commit_tree(editor, item))
-            return tree
-        return super().createEditor(parent, option, index)
-
-    def _commit_tree(self, editor: QTreeWidget, item: QTreeWidgetItem) -> None:
-        if item.data(0, Qt.UserRole) is None:
-            return
-        self.commitData.emit(editor)
-        self.closeEditor.emit(editor, QStyledItemDelegate.NoHint)
-
-    def setModelData(self, editor, model, index) -> None:
-        if isinstance(editor, QTreeWidget):
-            item = editor.currentItem()
-            account_id = item.data(0, Qt.UserRole) if item else None
-            if account_id:
-                model.setData(index, account_id)
-            return
-        super().setModelData(editor, model, index)
-
     def _fill(self, combo: QComboBox, index: QModelIndex) -> None:
         model: LineGridModel = index.model()
+        row = model.rows[index.row()]
         combo.addItem("", None)
-        for acc in model.ref.postable:
-            combo.addItem(acc.display, acc.id)
-        current = model.rows[index.row()].account_id
-        if current:
-            pos = combo.findData(current)
+        accounts = _moeins_for_line(model.ref, row)
+        for acc in accounts:
+            combo.addItem(acc.posting_display, acc.id)
+        if row.account_id:
+            pos = combo.findData(row.account_id)
             if pos >= 0:
                 combo.setCurrentIndex(pos)
+
+
+def _moeins_for_line(ref, row: LineRow) -> list:
+    """With a تفصیلی chosen, only معین accounts linked to it. Otherwise every معین."""
+    selected = [tid for tid in (row.tafsili1_id, row.tafsili2_id) if tid]
+    if not selected:
+        return list(ref.postable)
+    allowed: set[int] | None = None
+    for tid in selected:
+        ids = {account.id for account in ref.moein_accounts_for_tafsili(tid) if account.is_postable and account.is_active}
+        allowed = ids if allowed is None else allowed & ids
+    return [account for account in ref.postable if account.id in (allowed or set())]
 
 
 class TafsiliDelegate(PickerDelegate):
