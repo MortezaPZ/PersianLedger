@@ -1,10 +1,40 @@
 # PersianLedger
 
-دفتر مالی چندارزی رومیزی (PySide6 + SQLite). سند دوطرفه، تاریخ شمسی، چند ارز **بدون نرخ تسعیر**.
+A desktop multi-currency ledger. Each currency stays in its own double-entry books. Dates are Jalali. There is no exchange rate anywhere in the system.
 
-## اجرا از سورس
+## Overview
 
-پایتون ۳٫۱۱:
+PersianLedger is an offline Windows application for recording balanced journal entries across several currencies at once. Posted documents are immutable for a non-admin. An admin can return a posted document to draft, or delete it, and the action stays in the audit trail.
+
+## Features
+
+- Double-entry documents that must balance in each currency
+- Chart of accounts, floating detail accounts, and party statements
+- Jalali dates
+- SQLite on one machine, or PostgreSQL when several people share one office server
+- Attachments stored with the database, plus a local cache in server mode
+- Portable build and an installed build
+- Alembic migrations run on startup
+
+## Technology Stack
+
+- Python 3.11
+- PySide6
+- SQLAlchemy and Alembic
+- SQLite by default
+- PostgreSQL for the office server
+- pytest
+
+## Architecture
+
+The local file is `.localdata/ledger.sqlite3`, or `data/ledger.sqlite3` next to a portable executable. Server mode points the same application at a PostgreSQL database on the office network. The PostgreSQL password is stored in the Windows keyring when that is available, and in the ini file when it is not.
+
+| | SQLite | PostgreSQL |
+| --- | --- | --- |
+| Books | `.localdata/ledger.sqlite3` or `data/ledger.sqlite3` | The office server |
+| Attachments | Inside the database file, plus `attachments-cache` | The same pattern |
+
+## Installation
 
 ```powershell
 python -m venv .venv
@@ -12,41 +42,42 @@ python -m venv .venv
 .\.venv\Scripts\python run.py --demo
 ```
 
-بدون `--demo` فقط سرفصل پایه و سال مالی جاری ساخته می‌شود. داده در `.localdata\ledger.sqlite3` است.
+Without `--demo`, startup creates only the base chart and the current fiscal year.
 
-### مهاجرت دیتابیس
-
-برنامه هنگام شروع `alembic upgrade head` را خودش اجرا می‌کند. دستی:
+The application runs `alembic upgrade head` itself. To run it by hand:
 
 ```powershell
 .\.venv\Scripts\alembic upgrade head
 ```
 
-`alembic.ini` پیش‌فرض به `.localdata\ledger.sqlite3` اشاره دارد.
+`alembic.ini` points at `.localdata\ledger.sqlite3` by default.
 
-## ساخت نسخهٔ portable
+Portable build:
 
 ```powershell
 .\.venv\Scripts\pyinstaller packaging\persianledger.spec --noconfirm
 ```
 
-خروجی در `dist\PersianLedger\` است. فایل `portable.txt` کنار exe داده را در پوشهٔ `data\` نگه می‌دارد.
+Output is `dist\PersianLedger\`. A `portable.txt` file next to the executable keeps data in `data\`.
 
-## تست
+Office server setup is in `docs/deploy-server.md`.
+
+## Usage
+
+Open the application and record documents from the journal screen. The end-user layout, installers, and data paths are described in `docs/README.md`. The screen-by-screen guide is `docs/user-guide.md`.
+
+## Testing
 
 ```powershell
 .\.venv\Scripts\python -m pytest tests -q
 ```
 
-اسناد قطعی برای غیرمدیر تغییرناپذیرند؛ مدیر می‌تواند با ردپای کامل در سوابق، سند را به پیش‌نویس برگرداند یا حذف کند.
+PostgreSQL cases are skipped unless `PL_TEST_PG_URL` is set.
 
-رمز PostgreSQL در `keyring` ویندوز نگه داشته می‌شود؛ اگر keyring در دسترس نباشد در ini ذخیره می‌شود.
+## Limitations
 
-### حالت سرور
+The interface is Persian and right-to-left because that is the product. This README is the English overview. Network access from outside the office, and a VPN, are not part of the current server guide.
 
-چند کاربر می‌توانند به یک PostgreSQL روی شبکهٔ دفتر وصل شوند. راهنما: `docs/deploy-server-fa.md`.
+## License
 
-| محل | SQLite | PostgreSQL |
-|---|---|---|
-| دفتر | `.localdata/ledger.sqlite3` یا `data/ledger.sqlite3` | سرور |
-| پیوست | داخل فایل دیتابیس + کش `attachments-cache` | همان |
+See the repository license file if one is present.

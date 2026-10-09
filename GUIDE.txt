@@ -1,0 +1,50 @@
+PersianLedger 0.6.1
+Multi-currency ledger
+
+
+How to start
+
+1. Extract the whole folder from the zip to a normal path
+   (for example the Desktop, or D:\).
+
+2. Double-click PersianLedger.exe.
+
+Do not run the program from inside the zip. Extract it first.
+
+Python is not required. Nothing else has to be installed.
+The program works offline and does not connect to the internet.
+
+If Windows shows "Windows protected your PC", choose More info,
+then Run anyway. The file has no commercial code-signing certificate.
+
+
+Where the data is
+
+Everything is in the data folder next to this file:
+
+  data\ledger.sqlite3    database
+  data\backups\          automatic backups
+  data\attachments\      files attached to documents
+  data\exports\          Excel exports
+  data\logs\app.log      error log
+
+To take a backup, close the program and copy data\ledger.sqlite3.
+The whole ledger is that one file.
+
+
+Updating
+
+1. Extract the new version into a different folder.
+2. Copy the data folder from the old version next to the new executable.
+3. Start the program.
+
+Before it changes the database structure it writes a backup,
+then updates the structure. Documents are not dropped.
+
+
+Full guide
+
+docs\user-guide.md
+
+That file covers the chart, floating details, multi-currency
+documents, reversing and correcting entries, and the five reports.

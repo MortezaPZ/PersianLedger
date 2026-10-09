@@ -1,23 +1,27 @@
-# بازطراحی رابط کاربری
+# Interface redesign
 
-فایل‌های `after-<تم>-<صفحه>.png` با دستور زیر ساخته می‌شوند و همهٔ صفحات را در هر دو تم می‌گیرند:
+The `after-<theme>-<screen>.png` files are produced by:
 
-```
+```bash
 .venv/Scripts/python.exe scripts/capture_ui.py
 ```
 
-## قبل (نسخهٔ کامپایل‌شدهٔ ۰٫۵٫۰)
-سایدبار سرمه‌ای `#1f3350`، دکمهٔ طلایی `#f0a441`، بدون تم تیره، جداول بدون هاور مشخص.
+That command captures every screen in both themes.
 
-## بعد (۰٫۶٫۰)
+## Before (compiled 0.5.0)
 
-- **منبع واحد رنگ:** همهٔ رنگ‌ها در `app/ui/palette.py` تعریف می‌شوند و `app/ui/stylesheet.py` استایل‌شیت هر دو تم را از روی همان می‌سازد، تا قانونی در تم روشن اضافه و در تم تیره فراموش نشود.
-- **آیکون‌ها:** با QPainter کشیده می‌شوند (`app/ui/icons.py`). بستهٔ PySide6 این پروژه ماژول QtSvg ندارد، بنابراین آیکون‌های SVG قبلی اصلاً رندر نمی‌شدند و به‌جایشان مربع خالی دیده می‌شد.
-- **فرم‌ها:** برچسب بالای فیلد (`app/ui/widgets/fields.py`) به‌جای ستون جداگانهٔ برچسب؛ فیلترهای گزارش در یک شبکهٔ چهارستونی می‌چینند و هر خانه از بالا تراز می‌شود، پس ویجت بلند، همسایه‌های کوتاهش را جابه‌جا نمی‌کند.
-- **جداول:** ردیف‌های راه‌راه، هاور، اعداد راست‌چین با جداکنندهٔ هزارگان، بدون خطوط شبکه‌ای پررنگ. ستون‌ها به اندازهٔ محتوا (سقف ۳۰۰px برای شرح) تا ستون بیشتری در صفحه جا شود.
-- **تم تیره** با سوییچ در تنظیمات؛ آیکون‌های سایدبار هنگام تعویض تم دوباره رنگ می‌شوند.
+Navy sidebar `#1f3350`, gold button `#f0a441`, no dark theme, tables without a clear hover.
 
-### نکته‌های راست‌به‌چپ که در این دور رفع شد
-- `letter-spacing` روی متن فارسی حذف شد؛ خط فارسی پیوسته است و فاصلهٔ حروف اتصال‌ها را می‌شکند.
-- عنوان `QGroupBox` با `subcontrol-position` لنگر شد؛ جابه‌جایی با `right:` در حالت راست‌به‌چپ عنوان را از قاب بیرون می‌برد و حروف اولش بریده می‌شد («ظاهر» → «اهر»).
-- درخت سرفصل‌ها: ستون «کد / عنوان» کشیده می‌شود؛ پیش‌فرض Qt ستون آخر را کش می‌داد و عنوان حساب‌ها به «۱...» خلاصه می‌شد.
+## After (0.6.0)
+
+- One color source. Colors live in `app/ui/palette.py`. `app/ui/stylesheet.py` builds both themes from that palette, so a light-theme rule is not forgotten in the dark theme.
+- Icons are drawn with QPainter (`app/ui/icons.py`). This PySide6 build has no QtSvg module, so the old SVG icons rendered as empty squares.
+- Labels sit above the field (`app/ui/widgets/fields.py`) instead of in a separate label column. Report filters use a four-column grid aligned to the top, so a tall widget does not shove its short neighbors.
+- Tables are striped, with hover, right-aligned numbers and thousands separators, and without heavy grid lines. Columns size to content (description capped at 300 px) so more columns fit.
+- A dark theme switch in settings. Sidebar icons are recolored when the theme changes.
+
+## Right-to-left fixes in this round
+
+- Letter-spacing was removed from Persian text. The script is joined, and extra letter spacing breaks the joins.
+- `QGroupBox` titles are anchored with `subcontrol-position`. A `right:` offset in right-to-left mode pushed the title out of the frame and clipped the first letters.
+- On the chart tree, the code/title column stretches. Qt's default stretches the last column, which was truncating account titles.

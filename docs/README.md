@@ -4,7 +4,7 @@ Offline double-entry accounting for Windows. Persian RTL interface, Jalali dates
 several currencies side by side, and **no exchange rate anywhere in the system**.
 
 - Architecture and data model: [docs/architecture.md](docs/architecture.md)
-- User guide (Persian): [docs/user-guide-fa.md](docs/user-guide-fa.md)
+- User guide: [user-guide.md](user-guide.md)
 
 ---
 
@@ -165,11 +165,11 @@ All five share one shell: filter panel → grid → Excel export → print previ
 
 | Report | Shape |
 |---|---|
-| Account statement (کاردکس) | one row per line, a debit/credit/balance column group per currency, running balance |
-| Trial balance (تراز آزمایشی) | 2, 4 or 6 columns at kol / moin / tafsili level; one row per (account, currency) with a subtotal per currency |
-| Journal (دفتر روزنامه) | every line in date order, a total row per document per currency, plus a period total |
-| General ledger (دفتر کل و معین) | the kardex repeated for each account with activity; Excel writes one sheet per account |
-| Party statement (صورت وضعیت اشخاص) | every movement of one tafsili across all accounts, with the account column shown |
+| Account statement | one row per line, a debit/credit/balance column group per currency, running balance |
+| Trial balance | 2, 4 or 6 columns at ledger / subsidiary / detail level; one row per (account, currency) with a subtotal per currency |
+| Journal | every line in date order, a total row per document per currency, plus a period total |
+| General ledger | the account statement repeated for each account with activity; Excel writes one sheet per account |
+| Party statement | every movement of one detail account across all accounts, with the account column shown |
 
 ## Known limits in this build
 

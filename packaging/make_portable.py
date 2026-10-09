@@ -1,7 +1,6 @@
-"""Write the portable build's marker and Persian read-me.
+"""Write the portable build's marker and the English read-me.
 
-Kept in Python because Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI and
-would double-encode any Persian text embedded in the build script.
+Kept in Python because Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI.
 """
 
 from __future__ import annotations
@@ -19,90 +18,70 @@ While it is present, the database, backups, attachments and logs stay in the
 Delete it only if you want the installed-application behaviour.
 """
 
-README = """نرم‌افزار دفتر مالی چندارزی — نسخه {version}
+README = """PersianLedger {version}
+Multi-currency ledger
 
-═══════════════════════════════════════════════════════════
-  روش اجرا
-═══════════════════════════════════════════════════════════
+How to start
 
-  ۱. کل پوشه را از داخل فایل زیپ در یک مسیر دلخواه استخراج کنید
-     (مثلاً روی Desktop یا در D:\\).
+1. Extract the whole folder from the zip (Desktop or D:\\, for example).
+2. Double-click PersianLedger.exe.
 
-  ۲. روی فایل  PersianLedger.exe  دابل‌کلیک کنید.
+Do not run the program from inside the zip. Extract it first.
+Python is not required. The program works offline.
 
-  نکته مهم: برنامه را از داخل خود فایل زیپ اجرا نکنید؛ اول آن را استخراج کنید.
-
-  نیازی به نصب پایتون یا هیچ برنامه دیگری نیست.
-  برنامه کاملاً آفلاین کار می‌کند و به اینترنت وصل نمی‌شود.
-
-  اگر ویندوز پیام «Windows protected your PC» نشان داد، روی
-  «More info» و سپس «Run anyway» بزنید. این پیام به این دلیل است که
-  فایل اجرایی امضای دیجیتال تجاری ندارد، نه به دلیل وجود مشکل.
+If Windows shows "Windows protected your PC", choose More info,
+then Run anyway. The executable has no commercial code-signing certificate.
 
 
-═══════════════════════════════════════════════════════════
-  محل نگهداری اطلاعات
-═══════════════════════════════════════════════════════════
+Where the data is
 
-  همه اطلاعات شما در پوشه  data  کنار همین فایل ذخیره می‌شود:
+Everything is in the data folder next to this file:
 
-    data\\ledger.sqlite3         فایل دیتابیس
-    data\\backups\\               نسخه‌های پشتیبان
-    data\\attachments-cache\\     کش موقت باز کردن پیوست‌ها
-    data\\exports\\               خروجی‌های اکسل
-    data\\logs\\app.log           فایل ثبت خطاها
+  data\\ledger.sqlite3         database
+  data\\backups\\              backups
+  data\\attachments-cache\\    temporary cache for opening attachments
+  data\\exports\\              Excel exports
+  data\\logs\\app.log          error log
 
-  در حالت فایل محلی، پشتیبان‌گیری از داخل برنامه یا کپی فایل ledger.sqlite3
-  (وقتی برنامه بسته است) کافی است. پیوست‌ها داخل همین فایل هستند.
+For a local file, use the in-app backup or copy ledger.sqlite3 while the
+program is closed. Attachments are stored inside that file.
 
 
-═══════════════════════════════════════════════════════════
-  اتصال به سرور شبکه
-═══════════════════════════════════════════════════════════
+Network server
 
-  از داخل برنامه «تنظیمات اتصال» را باز کنید، نشانی PostgreSQL را بدهید
-  و برنامه را دوباره اجرا کنید. جزئیات در docs\\deploy-server-fa.md است.
+Open connection settings, enter the PostgreSQL address, and start the
+program again. Details are in docs\\deploy-server.md.
 
 
-═══════════════════════════════════════════════════════════
-  به‌روزرسانی به نسخه جدید
-═══════════════════════════════════════════════════════════
+Updating
 
-  ۱. نسخه جدید را در یک پوشه دیگر استخراج کنید. برنامه را ببندید.
-  ۲. فایل  update_portable.ps1  را با دو مسیر اجرا کنید: پوشه نصب فعلی و پوشه نسخه جدید.
-     این کار فقط فایل برنامه را عوض می‌کند و پوشه  data  را دست نمی‌زند.
-  ۳. برنامه را از همان پوشه قبلی اجرا کنید.
+1. Extract the new version into a different folder and close the program.
+2. Run update_portable.ps1 with the current folder and the new folder.
+   That replaces the program files and does not touch data.
+3. Start the program from the same folder as before.
 
-  برنامه پیش از هر تغییری در ساختار دیتابیس، یک نسخه پشتیبان می‌سازد و
-  سپس ساختار را به‌روز می‌کند. هیچ داده‌ای از بین نمی‌رود.
-
-  پشتیبان نسخهٔ قدیمی را از داخل برنامه بازیابی کنید؛ ساختارش خودکار به‌روز می‌شود.
-  کار خانه را در شرکت با دکمهٔ «افزودن کار خانه» به دیتابیس شبکه اضافه کنید.
-  جزئیات در docs\\user-guide-fa.md است.
+Before a database structure change the program writes a backup, then
+updates the structure. Restore an older backup from inside the program.
+Add home-office work to the office database with the home-work action.
+Details are in docs\\user-guide.md.
 
 
-═══════════════════════════════════════════════════════════
-  راهنمای کامل
-═══════════════════════════════════════════════════════════
+Full guide
 
-  پوشه  راهنمای-شبکه.html
-     آموزش از صفر برای شبکهٔ دفتر (با تصویر). روی آن دابل‌کلیک کنید تا در مرورگر باز شود.
-
-  پوشه  docs  →  فایل  user-guide-fa.md
-
-  این فایل راهنمای کامل کار با سیستم است: تعریف سرفصل و تفصیلی،
-  ثبت سند چندارزی، سند برگشتی و اصلاحی، و هر پنج گزارش.
+docs\\user-guide.md covers the chart, floating details, multi-currency
+documents, reversing and correcting entries, and the five reports.
+The illustrated network notes, if shipped beside the program, open in a browser.
 """
 
 
 def main() -> int:
     target = Path(sys.argv[1])
     (target / "portable.txt").write_text(MARKER, encoding="utf-8")
-    (target / "راهنما.txt").write_text(
+    (target / "GUIDE.txt").write_text(
         README.format(version=APP_VERSION).replace("\n", "\r\n"),
         encoding="utf-8-sig",
     )
-    print(f"wrote portable.txt and the Persian read-me into {target.name}")
+    print(f"wrote portable.txt and GUIDE.txt into {target.name}")
     return 0
 
 

@@ -470,9 +470,9 @@ class SettingsView(BaseView):
     def open_answers(self) -> None:
         from app import paths
 
-        path = paths.project_root() / "docs" / "answers-fa.md"
+        path = paths.project_root() / "docs" / "answers.md"
         if paths.is_frozen():
-            frozen = paths.resource_dir() / "docs" / "answers-fa.md"
+            frozen = paths.resource_dir() / "docs" / "answers.md"
             if frozen.exists():
                 path = frozen
         if path.exists():

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>PersianLedger network guide</title>
+<style>
+body { margin:0; background:#f4efe6; color:#1c1914; font-family:"Segoe UI",Tahoma,Arial,sans-serif; font-size:17px; line-height:1.7; }
+main { max-width:900px; margin:0 auto; padding:28px 20px 80px; }
+h1 { font-size:28px; margin:0 0 8px; }
+h2 { font-size:21px; margin:40px 0 12px; padding-bottom:6px; border-bottom:2px solid #c9b48a; }
+.meta { color:#5c564c; margin-bottom:20px; }
+.box { background:#fff8ea; border:1px solid #e0d0a8; border-radius:10px; padding:14px 16px; margin:14px 0; }
+figure { margin:16px 0 26px; background:#fff; border:1px solid #ddd6c8; border-radius:10px; padding:10px; }
+figure img { display:block; width:100%; height:auto; border-radius:6px; }
+figcaption { margin-top:8px; color:#4a453c; font-size:15px; }
+code { font-family:Consolas,"Courier New",monospace; background:#ece7dc; padding:1px 6px; border-radius:4px; }
+</style>
+</head>
+<body>
+<main>
+<h1>From zero: install, run, and work on the network</h1>
+<p class="meta">PersianLedger 0.7.1. Written for someone who has not set up a server or a firewall before.</p>
+<div class="box">Two modes: one person on one computer (a local file), or several people in the office (one server, and the others connect to it). The internet and a VPN are not required, and this version does not support them.</div>
+
+<h2>1. Extract the zip. Do not run the program from inside it</h2>
+<p>Right-click the zip and choose Extract All. Pick a folder, for example the Desktop. You should see <code>PersianLedger.exe</code> inside that folder.</p>
+<figure><img src="fig-01.png" alt="The program folder after extraction"/><figcaption>Figure 1. After extraction. Do not run the program from inside the zip.</figcaption></figure>
+<p>Double-click <code>PersianLedger.exe</code>. If Windows shows "Windows protected your PC", choose More info, then Run anyway. That message is the missing commercial signature, not a virus.</p>
+<figure><img src="fig-02.png" alt="Windows protected your PC"/><figcaption>Figure 2. If this message appears, choose More info, then Run anyway.</figcaption></figure>
+
+<h2>2. First sign-in</h2>
+<p>The first launch asks you to create a manager account. Write the username and password down.</p>
+<figure><img src="fig-03.png" alt="Sign-in or create the manager account"/><figcaption>Figure 3. Sign-in, or create the manager. Connection settings are at the bottom of the window.</figcaption></figure>
+
+<h2>3. One person, if you do not want a network</h2>
+<p>Nothing else is required. The program creates the ledger in the <code>data</code> folder next to the executable. The status bar shows the path. Take backups from Settings.</p>
+<p>If only one person uses the books, stop here. The rest of this guide is several users on the office network.</p>
+
+<h2>4. Which computer is the server?</h2>
+<p>The computer that stays on. Usually the accountant's machine, or a small desktop. It must be on the office Wi-Fi or a cable, not only on a phone hotspot. PostgreSQL is installed on that one machine. Everyone else opens the program and types this machine's address.</p>
+
+<h2>5. This computer's address on the office network</h2>
+<p>On the server, open Start, type <code>cmd</code>, and press Enter. In the window type <code>ipconfig</code> and press Enter. Under Wi-Fi or Ethernet, find IPv4. It usually starts with <code>192.168</code>.</p>
+<p>If a VPN is on you also see an address starting with <code>10.</code>. Do not use that one. The office address is the internal Wi-Fi address. On the machine where these screenshots were taken it was <code>192.168.1.114</code>.</p>
+<figure><img src="fig-04.png" alt="Example IPv4 address on the office network"/><figcaption>Figure 4. An example office address. Yours may differ. Use your own Wi-Fi IPv4.</figcaption></figure>
+
+<h2>6. Install PostgreSQL on the server</h2>
+<ol>
+<li>Search for the PostgreSQL 16 Windows installer from EDB.</li>
+<li>Click Next through the installer. Write down the <code>postgres</code> user's password.</li>
+<li>Leave the port at 5432.</li>
+<li>You can skip Stack Builder.</li>
+<li>Open pgAdmin. Right-click the server and open the query tool. Run <code>deploy/postgres/init_db.sql</code> from this package. Change the password of the <code>persianledger</code> role to a real password.</li>
+</ol>
+<figure><img src="fig-05.png" alt="SQL that creates the database and the application user"/><figcaption>Figure 5. These lines create the database and the application user. Change the password.</figcaption></figure>
+<p>In the PostgreSQL data folder, open <code>postgresql.conf</code> in Notepad. Set <code>listen_addresses</code> so the server accepts connections from the office network. Open <code>pg_hba.conf</code> and add a line for your office subnet, for example <code>192.168.0.0/16</code>. Restart the PostgreSQL service from Windows Services.</p>
+
+<h2>7. Open the firewall port</h2>
+<p>Windows blocks incoming connections by default. Allow port 5432 for the office.</p>
+<p>The simpler way: find <code>deploy/postgres/setup_office_server.ps1</code>, right-click it, and choose Run with PowerShell. If Windows blocks that, open PowerShell as Administrator and run the same file. It opens the port on the private network and prints the address.</p>
+<figure><img src="fig-06.png" alt="Office server setup script"/><figcaption>Figure 6. The office-server setup script. Run it as Administrator.</figcaption></figure>
+<p>The manual way is Windows Defender Firewall, Advanced settings, Inbound Rules, New Rule, Port, TCP 5432, allow the connection, Private profile, and a name you will recognize.</p>
+<figure><img src="fig-07.png" alt="Windows Firewall in Control Panel"/><figcaption>Figure 7. Firewall, from Control Panel.</figcaption></figure>
+<figure><img src="fig-08.png" alt="Windows Defender Firewall with Advanced Security"/><figcaption>Figure 8. Advanced security. Inbound rules are on the left. New Rule is on the right.</figcaption></figure>
+<figure><img src="fig-09.png" alt="New rule wizard, port"/><figcaption>Figure 9. Choose Port.</figcaption></figure>
+<figure><img src="fig-10.png" alt="TCP port 5432"/><figcaption>Figure 10. TCP, port 5432.</figcaption></figure>
+<figure><img src="fig-11.png" alt="Allow the connection"/><figcaption>Figure 11. Allow the connection.</figcaption></figure>
+<figure><img src="fig-12.png" alt="Private profile"/><figcaption>Figure 12. Private is enough in an office. Tick Public only if the Wi-Fi is marked Public. Give the rule a clear name.</figcaption></figure>
+<p>If a client cannot connect, tick Public on the same rule, or set the network to Private in Windows Settings.</p>
+
+<h2>8. On each user's computer</h2>
+<p>Copy the extracted folder. The client does not need PostgreSQL. Open the program and open connection settings from the sign-in window, or from currencies and the fiscal year. Choose the network server.</p>
+<p>The address is the server IPv4. Port 5432. The database name and user are <code>persianledger</code>. The password is the one you set in SQL. Test the connection. If it succeeds, save, close the program, and open it again.</p>
+<figure><img src="fig-13.png" alt="Connection settings in the application"/><figcaption>Figure 13. Settings, the database connection box.</figcaption></figure>
+<figure><img src="fig-14.png" alt="PostgreSQL connection fields"/><figcaption>Figure 14. Server address, port, database, user, and password.</figcaption></figure>
+<figure><img src="fig-15.png" alt="Connection succeeded"/><figcaption>Figure 15. A successful test. Then close the program once and open it again.</figcaption></figure>
+
+<h2>9. Move the current ledger to the server</h2>
+<p>If you have been working on the local file, on the server computer, still on SQLite, sign in as manager. Open Settings, then move the current database to PostgreSQL. Enter the server address. After it succeeds, save the connection as the server.</p>
+<figure><img src="fig-16.png" alt="Move the current database to PostgreSQL"/><figcaption>Figure 16. The move button is shown only for a local file, and only to a manager.</figcaption></figure>
+
+<h2>10. Backup and restore</h2>
+<p>On a local file, a backup is a sqlite3 file. On the network, the backup is created on the server. A copy on a shared folder is an archive, not the daily working copy.</p>
+<figure><img src="fig-17.png" alt="Backup and restore"/><figcaption>Figure 17. Create a backup, or restore from a file. After a restore, the status bar should name your file.</figcaption></figure>
+
+<h2>11. Account browse and dates</h2>
+<p>If the range is today to today and you still see earlier movement, clear "Show the balance from before the range". That checkbox puts the old balance in the opening column.</p>
+<figure><img src="fig-18.png" alt="Account browse"/><figcaption>Figure 18. Account browse. The balance-before-range checkbox defaults to off.</figcaption></figure>
+
+<h2>12. Chart of accounts</h2>
+<p>The tree opens down to the subsidiary by default. Details open when you click a subsidiary. The group name is shown, not only "detail 1".</p>
+<figure><img src="fig-19.png" alt="Chart of accounts"/><figcaption>Figure 19. The chart, down to the subsidiary.</figcaption></figure>
+
+<h2>If it does not connect</h2>
+<ul>
+<li>Is PostgreSQL running on the server? Check Services.</li>
+<li>Is the IP the Wi-Fi address, not the VPN address?</li>
+<li>Is there a firewall rule for 5432? If the network is Public, also tick Public.</li>
+<li>Were <code>listen_addresses</code> and <code>pg_hba.conf</code> saved, and was the service restarted?</li>
+<li>Is the SQL password the same one typed in the program?</li>
+</ul>
+<p>The status bar shows whether the program is on SQLite or on PostgreSQL.</p>
+</main>
+</body>
+</html>
