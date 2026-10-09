@@ -66,6 +66,20 @@ Office server setup is in `docs/deploy-server.md`.
 
 Open the application and record documents from the journal screen. The end-user layout, installers, and data paths are described in `docs/README.md`. The screen-by-screen guide is `docs/user-guide.md`.
 
+## Screenshots
+
+Captured from the real 0.6.0 UI. Labels are Persian because that is the product interface.
+
+| Document entry | Account browse |
+| --- | --- |
+| ![Document entry](docs/ui-before-after/after-light-entry.png) | ![Account browse](docs/ui-before-after/after-light-browse.png) |
+
+| Trial balance | Chart of accounts |
+| --- | --- |
+| ![Trial balance](docs/ui-before-after/after-light-trial.png) | ![Chart of accounts](docs/ui-before-after/after-light-accounts.png) |
+
+Light and dark captures for every main screen are in `docs/ui-before-after/`. The office network walkthrough with real Windows screenshots is `docs/network-guide/index.html`.
+
 ## Testing
 
 ```powershell
