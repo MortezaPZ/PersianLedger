@@ -200,6 +200,53 @@ def test_closing_picker_does_not_clear_tafsili(qapp, tmp_path):
     assert view.model.rows[0].tafsili1_id == tafsili.id
 
 
+def test_reopening_document_keeps_debit_and_credit_lines(qapp, tmp_path):
+    ctx = _ctx(tmp_path)
+    debit_acc = ctx.refdata.postable[0]
+    credit_acc = ctx.refdata.postable[1] if len(ctx.refdata.postable) > 1 else debit_acc
+    cur = ctx.refdata.currencies[0]
+    year_id = ctx.fiscal_year_id
+    with ctx.session() as db:
+        year = next(y for y in master_data.fiscal_years(db) if y.id == year_id)
+        doc = document_service.save_draft(
+            db,
+            document_service.DocumentInput(
+                fiscal_year_id=year.id,
+                date_g=year.start_date_g,
+                date_j=year.start_date_j,
+                description="بازگشایی بدهکار و بستانکار",
+                lines=[
+                    document_service.LineInput(
+                        account_id=debit_acc.id,
+                        currency_id=cur.id,
+                        debit=Decimal("100"),
+                        credit=Decimal("0"),
+                    ),
+                    document_service.LineInput(
+                        account_id=credit_acc.id,
+                        currency_id=cur.id,
+                        debit=Decimal("0"),
+                        credit=Decimal("100"),
+                    ),
+                ],
+            ),
+            None,
+            ctx.user_id,
+        )
+        doc_id = doc.id
+    view = DocumentEntryView(ctx)
+    view.clear()
+    view.load_document(doc_id)
+    filled = view.model.filled_rows()
+    assert len(filled) == 2
+    assert filled[0].debit == Decimal("100")
+    assert filled[0].credit == Decimal("0")
+    assert filled[1].debit == Decimal("0")
+    assert filled[1].credit == Decimal("100")
+    totals = view.model.totals()[cur.id]
+    assert totals == (Decimal("100"), Decimal("100"))
+
+
 def test_same_moein_code_under_two_kol_posts_as_combined_code(qapp, tmp_path):
     from app.domain.enums import AccountType
 

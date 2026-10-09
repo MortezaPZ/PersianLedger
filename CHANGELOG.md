@@ -1,5 +1,13 @@
 # PersianLedger changelog
 
+## 0.7.3
+
+- Document reopen keeps both debit and credit lines.
+- Moein list filtered by linked floating detail; picker no longer clears a detail on cancel.
+- Same moein code allowed under different kol accounts; posting uses the combined code.
+- Settings label clarified to «افزودن کار خانه»; backup path on Windows fixed.
+- Installer and app still reuse the existing data folder (no fresh empty database on upgrade).
+
 ## 0.7.2
 
 - A floating detail links to a subsidiary account only from the floating-detail screen. The chart tree stops at the subsidiary.
