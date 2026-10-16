@@ -45,7 +45,7 @@ from app.version import APP_NAME_FA
 
 class DocumentEntryView(BaseView):
     title = "ثبت سند"
-    hint = "هر ارز جداگانه تراز می‌شود. نرخ تسعیر در این برنامه وجود ندارد."
+    hint = "هر ارز جداگانه تراز می‌شود. تفصیلی ۱ و ۲ دو بُعد مستقل‌اند؛ با انتخاب تفصیلی، فهرست معین به اتصال‌های مجاز محدود می‌شود."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)

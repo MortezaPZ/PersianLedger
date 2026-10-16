@@ -206,7 +206,7 @@ class TafsiliDialog(QDialog):
 
 class TafsiliView(BaseView):
     title = "تفصیلی شناور"
-    hint = "گروه تفصیلی، اشخاص و پروژه‌ها، و معین‌هایی که هر گروه به آن‌ها وصل است."
+    hint = "هر تفصیلی عضو یک یا چند گروه است. گروه، دسته‌بندی و مبنای اتصال به معین است؛ تفصیلی ۱ و ۲ در سند رابطهٔ والد–فرزندی ندارند."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)

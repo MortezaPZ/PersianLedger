@@ -8,8 +8,8 @@ Two builds carry the same application.
 
 | Build | When to use it |
 | --- | --- |
-| `PersianLedger-Setup-0.3.0.exe` | Normal install. Needs administrator rights once. |
-| `PersianLedger-0.3.0-portable.zip` | No install. Extract and run `PersianLedger.exe`. |
+| `PersianLedger-Setup-0.7.4.exe` | Normal install. Needs administrator rights once. |
+| `PersianLedger-0.7.4-portable.zip` | No install. Extract and run `PersianLedger.exe`. |
 
 Python, Qt, and the font are inside both builds.
 
@@ -21,6 +21,10 @@ Python, Qt, and the font are inside both builds.
 | Excel | `…\PersianLedger\exports\` | `data\exports\` |
 | Log | `…\PersianLedger\logs\app.log` | `data\logs\app.log` |
 | Settings | `%APPDATA%\PersianLedger\config.ini` | `data\config.ini` |
+
+In an installed copy, Windows keeps `ProgramData` hidden by default. The basic
+settings page shows the full backup path and can open that folder. The exit
+backup prompt also opens the folder after creating a backup.
 
 Portable mode is the `portable.txt` file next to the executable. The ZIP ships that file. Deleting it makes the folder behave like an installed copy.
 

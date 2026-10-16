@@ -15,8 +15,8 @@ suits the machine.
 
 | Artifact | Use it when |
 |---|---|
-| `PersianLedger-Setup-0.3.0.exe` (40 MB) | normal install: Program Files, desktop icon, Add/Remove Programs entry. Needs administrator rights once. |
-| `PersianLedger-0.3.0-portable.zip` (54 MB) | no install and no admin rights: extract anywhere and double-click `PersianLedger.exe`. |
+| `PersianLedger-Setup-0.7.4.exe` | normal install: Program Files, desktop icon, Add/Remove Programs entry. Needs administrator rights once. |
+| `PersianLedger-0.7.4-portable.zip` | no install and no admin rights: extract anywhere and double-click `PersianLedger.exe`. |
 
 Nothing else is required — Python, Qt and the Persian font are inside both.
 

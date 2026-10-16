@@ -148,7 +148,7 @@ class LinkTafsiliDialog(QDialog):
 
 class AccountsView(BaseView):
     title = "درخت سرفصل‌ها"
-    hint = "کل و معین اینجاست. اتصال تفصیلی هر معین را به خود تفصیلی وصل می‌کند و در این درخت نشان داده نمی‌شود."
+    hint = "ساختار حساب‌ها: گروه حساب ← کل ← معین. تفصیلی‌ها زیرمجموعهٔ درخت حساب نیستند؛ گروه تفصیلی دسته‌بندی آن‌هاست و تفصیلی ۱ و ۲ دو خانهٔ مستقل سند هستند."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)

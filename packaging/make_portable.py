@@ -1,4 +1,4 @@
-"""Write the portable build's marker and the English read-me.
+"""Write the portable build's marker and read-me files.
 
 Kept in Python because Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI.
 """
@@ -78,6 +78,32 @@ documents, reversing and correcting entries, and the five reports.
 The illustrated network notes, if shipped beside the program, open in a browser.
 """
 
+PERSIAN_README = """دفتر مالی چندارزی — نسخه {version}
+
+شروع کار
+۱. همه پوشه را از فایل ZIP استخراج کنید.
+۲. روی PersianLedger.exe دوبار کلیک کنید.
+
+برنامه را از داخل فایل ZIP اجرا نکنید. نیازی به نصب پایتون نیست و برنامه آفلاین است.
+
+محل اطلاعات
+پایگاه داده، پشتیبان‌ها، پیوست‌ها، خروجی‌ها و گزارش خطا در پوشه data کنار برنامه
+ذخیره می‌شوند. نسخه‌های پشتیبان در data\\backups قرار دارند.
+
+در صفحه «تنظیمات پایه» مسیر کامل پشتیبان نمایش داده می‌شود. دکمه «باز کردن پوشه
+پشتیبان‌ها» آن را باز می‌کند. هنگام ساخت پشتیبان از کادر خروج هم پوشه باز می‌شود.
+
+راهنمای کامل فارسی در docs\\user-guide-fa.md قرار دارد.
+
+نکته‌های این نسخه
+۱. انتخاب تفصیلی، معین را عوض یا قفل نمی‌کند؛ فهرست معین با تفصیلی انتخاب‌شده
+   سازگار می‌شود.
+۲. تفصیلی ۱ و تفصیلی ۲ دو خانه مستقل هستند و سلسله‌مراتب ندارند.
+۳. درخت حساب‌ها شامل گروه حساب، کل و معین است؛ تفصیلی‌ها در آن شاخه نیستند.
+۴. پیش از حذف سرفصل یا تفصیلی، برنامه استفاده‌نشدن آن را بررسی می‌کند.
+۵. سند بدهکار/بستانکار پس از بستن و بازکردن دوباره برنامه حفظ می‌شود.
+"""
+
 
 def main() -> int:
     target = Path(sys.argv[1])
@@ -86,7 +112,11 @@ def main() -> int:
         README.format(version=APP_VERSION).replace("\n", "\r\n"),
         encoding="utf-8-sig",
     )
-    print(f"wrote portable.txt and GUIDE.txt into {target.name}")
+    (target / "راهنما.txt").write_text(
+        PERSIAN_README.format(version=APP_VERSION).replace("\n", "\r\n"),
+        encoding="utf-8-sig",
+    )
+    print(f"wrote portable.txt, GUIDE.txt and راهنما.txt into {target.name}")
     return 0
 
 

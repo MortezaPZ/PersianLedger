@@ -246,8 +246,13 @@ class MainWindow(QMainWindow):
         if choice == "yes":
             try:
                 info = backup_service.create(engine_module.get_engine(), self.ctx.config)
-                QMessageBox.information(self, APP_NAME_FA, f"پشتیبان ذخیره شد:\n{info.path}")
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(info.path.parent)))
+                backup_path = info.path.resolve()
+                QMessageBox.information(
+                    self,
+                    APP_NAME_FA,
+                    f"پشتیبان در مسیر زیر ذخیره شد و پوشه باز شد:\n{backup_path}",
+                )
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(backup_path.parent)))
             except Exception as exc:
                 QMessageBox.warning(self, APP_NAME_FA, str(exc))
                 event.ignore()

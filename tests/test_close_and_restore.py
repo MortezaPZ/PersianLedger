@@ -1,6 +1,7 @@
 """Automated coverage for delivery checklist items 9 (exit backup) and 10 (restore)."""
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtGui import QCloseEvent, QGuiApplication
@@ -85,15 +86,28 @@ def test_exit_yes_creates_backup_and_closes(qapp, tmp_path):
     window = _window(tmp_path, qapp)
     before = {p.name for p in window.ctx.config.backup_dir.glob("*.sqlite3")}
     event = QCloseEvent()
+    messages = []
+
+    def capture_message(*args):
+        messages.append(args[2])
+        return QMessageBox.Ok
+
     with (
         patch.object(window, "_query_exit_backup", return_value="yes"),
-        patch.object(QMessageBox, "information", return_value=QMessageBox.Ok),
+        patch.object(QMessageBox, "information", side_effect=capture_message),
+        patch("app.ui.main_window.QDesktopServices.openUrl", return_value=True) as open_folder,
     ):
         window.closeEvent(event)
     qapp.processEvents()
     assert event.isAccepted()
     after = {p.name for p in window.ctx.config.backup_dir.glob("*.sqlite3")}
     assert after - before
+    assert len(messages) == 1
+    backup_path = Path(messages[0].split("\n", 1)[1])
+    assert backup_path.is_file()
+    assert backup_path.parent == window.ctx.config.backup_dir
+    opened = open_folder.call_args.args[0]
+    assert Path(opened.toLocalFile()).resolve() == backup_path.parent.resolve()
 
 
 def test_restore_reopens_engine_reloads_tree_and_clamps_geometry(qapp, tmp_path):

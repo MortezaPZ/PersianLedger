@@ -214,6 +214,22 @@ QPushButton[kind="primary"]:disabled {{
     border-color: {line};
 }}
 
+QPushButton[kind="secondary"] {{
+    background: {brand_soft};
+    color: {text};
+    border: 1px solid {brand};
+    font-weight: bold;
+}}
+QPushButton[kind="secondary"]:hover {{
+    background: {surface_muted};
+    border-color: {brand_hover};
+}}
+QPushButton[kind="secondary"]:disabled {{
+    background: {surface_muted};
+    color: {text_faint};
+    border-color: {line};
+}}
+
 #PickerButton {{
     padding: 7px 2px;
     font-size: 15px;

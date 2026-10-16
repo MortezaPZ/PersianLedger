@@ -1,5 +1,13 @@
 # PersianLedger changelog
 
+## 0.7.4
+
+- New currency and fiscal-year buttons use dark text on a light blue background for clearer labels.
+- Selecting a detail keeps the account list focused on allowed subsidiaries; the two detail fields are documented as independent dimensions.
+- Account and floating-detail deletion are available with safeguards for records referenced by documents.
+- Backup messages show the resolved file path, open its folder, and settings display the backup location.
+- Reopening a saved draft after restarting the application is covered for both debit and credit lines.
+
 ## 0.7.3
 
 - Document reopen keeps both debit and credit lines.

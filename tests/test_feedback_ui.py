@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import Qt
@@ -201,6 +202,8 @@ def test_closing_picker_does_not_clear_tafsili(qapp, tmp_path):
 
 
 def test_reopening_document_keeps_debit_and_credit_lines(qapp, tmp_path):
+    from app.db import engine as engine_module
+
     ctx = _ctx(tmp_path)
     debit_acc = ctx.refdata.postable[0]
     credit_acc = ctx.refdata.postable[1] if len(ctx.refdata.postable) > 1 else debit_acc
@@ -234,7 +237,9 @@ def test_reopening_document_keeps_debit_and_credit_lines(qapp, tmp_path):
             ctx.user_id,
         )
         doc_id = doc.id
-    view = DocumentEntryView(ctx)
+    engine_module.get_engine().dispose()
+    restarted_ctx = AppContext(bootstrap.start(ctx.config, with_demo=False))
+    view = DocumentEntryView(restarted_ctx)
     view.clear()
     view.load_document(doc_id)
     filled = view.model.filled_rows()
@@ -290,12 +295,93 @@ def test_report_dates_default_and_reject_invalid(qapp, tmp_path):
 def test_settings_has_currency_and_year_actions(qapp, tmp_path):
     from PySide6.QtWidgets import QPushButton
 
+    from app.ui.main_window import PAGES
+
     ctx = _ctx(tmp_path)
     view = SettingsView(ctx)
-    texts = {btn.text() for btn in view.findChildren(QPushButton)}
+    buttons = {btn.text(): btn for btn in view.findChildren(QPushButton)}
+    texts = set(buttons)
     assert "افزودن ارز" in texts
     assert "سال مالی جدید" in texts
     assert "پاسخ پرسش‌های راهنما" in texts
+    for label in ("افزودن ارز", "سال مالی جدید"):
+        button = buttons[label]
+        assert button.property("kind") == "secondary"
+    secondary_style = qapp.styleSheet().split('QPushButton[kind="secondary"] {', 1)[1].split("}", 1)[0]
+    assert "color: #101a28;" in secondary_style
+    assert view.title == "تنظیمات پایه"
+    assert next(title for key, title, *_ in PAGES if key == "settings") == "تنظیمات پایه"
+    assert str(ctx.config.backup_dir) in view.backup_path_hint.text()
+    with patch("app.ui.views.settings_view.QDesktopServices.openUrl") as open_answers:
+        view.open_answers()
+    assert Path(open_answers.call_args.args[0].toLocalFile()) == Path("docs/answers-fa.md").resolve()
+
+
+def test_account_tree_deletes_an_unused_subsidiary(qapp, tmp_path):
+    from app.domain.enums import AccountType
+
+    ctx = _ctx(tmp_path)
+    group_id = ctx.refdata.groups[0].id
+    with ctx.session() as db:
+        parent = account_service.create(
+            db,
+            code="9876",
+            name="کل آزمایشی",
+            group_id=group_id,
+            account_type=AccountType.ASSET,
+        )
+        account = account_service.create(
+            db,
+            code="0001",
+            name="معین آزمایشی",
+            parent_id=parent.id,
+        )
+        account_id = account.id
+    view = AccountsView(ctx)
+
+    def find(item):
+        if item.data(0, Qt.UserRole) == ("account", account_id):
+            return item
+        for i in range(item.childCount()):
+            found = find(item.child(i))
+            if found is not None:
+                return found
+        return None
+
+    item = next(
+        found
+        for i in range(view.tree.topLevelItemCount())
+        if (found := find(view.tree.topLevelItem(i))) is not None
+    )
+    view.tree.setCurrentItem(item)
+    with patch.object(view, "confirm", return_value=True):
+        view.delete_account()
+    with ctx.read_session() as db:
+        assert db.get(Account, account_id) is None
+
+
+def test_floating_detail_page_deletes_an_unused_detail(qapp, tmp_path):
+    from app.db.models import Tafsili
+    from app.ui.views.tafsili_view import TafsiliView
+
+    ctx = _ctx(tmp_path)
+    group_id = ctx.refdata.groups[0].id
+    with ctx.session() as db:
+        item = master_data.create_tafsili(
+            db,
+            code="ZZ-DELETE",
+            name="تفصیلی آزمایشی",
+            group_id=group_id,
+        )
+        item_id = item.id
+    ctx.reload_refdata()
+    view = TafsiliView(ctx)
+    row = next(i for i in range(view.table.rowCount()) if view.table.item(i, 0).text() == "ZZ-DELETE")
+    view.table.selectRow(row)
+    with patch.object(view, "confirm", return_value=True):
+        view.delete_current()
+    with ctx.read_session() as db:
+        assert db.get(Tafsili, item_id) is None
 
 
 def _attach_empty_draft(ctx):

@@ -286,7 +286,7 @@ class SettingsView(BaseView):
         years_title.setObjectName("SectionTitle")
         cur_bar = QHBoxLayout()
         add_cur = QPushButton("افزودن ارز")
-        add_cur.setProperty("kind", "primary")
+        add_cur.setProperty("kind", "secondary")
         edit_cur = QPushButton("ویرایش ارز")
         add_cur.clicked.connect(self.add_currency)
         edit_cur.clicked.connect(self.edit_currency)
@@ -295,7 +295,7 @@ class SettingsView(BaseView):
         cur_bar.addStretch()
         year_bar = QHBoxLayout()
         add_year = QPushButton("سال مالی جدید")
-        add_year.setProperty("kind", "primary")
+        add_year.setProperty("kind", "secondary")
         add_year.clicked.connect(self.add_fiscal_year)
         year_bar.addWidget(add_year)
         year_bar.addStretch()
@@ -332,6 +332,10 @@ class SettingsView(BaseView):
         for btn in (backup, quick, restore, folder):
             row.addWidget(btn)
         layout.addLayout(row)
+        self.backup_path_hint = QLabel(f"محل ذخیرهٔ پشتیبان‌ها: {self.ctx.config.backup_dir}")
+        self.backup_path_hint.setObjectName("PageHint")
+        self.backup_path_hint.setWordWrap(True)
+        layout.addWidget(self.backup_path_hint)
         self.backup_table = QTableWidget(0, 3)
         self.backup_table.setHorizontalHeaderLabels(["فایل", "حجم", "تاریخ"])
         layout.addWidget(self.backup_table)
@@ -407,6 +411,7 @@ class SettingsView(BaseView):
             for col, value in enumerate((y.title, y.start_date_j, y.end_date_j, "بسته" if y.is_closed else "باز")):
                 self.year_table.setItem(r, col, QTableWidgetItem(value))
         backups = backup_service.list_backups(self.ctx.config)
+        self.backup_path_hint.setText(f"محل ذخیرهٔ پشتیبان‌ها: {self.ctx.config.backup_dir}")
         self.backup_table.setRowCount(len(backups))
         for r, b in enumerate(backups):
             self.backup_table.setItem(r, 0, QTableWidgetItem(b.path.name))
@@ -470,9 +475,9 @@ class SettingsView(BaseView):
     def open_answers(self) -> None:
         from app import paths
 
-        path = paths.project_root() / "docs" / "answers.md"
+        path = paths.project_root() / "docs" / "answers-fa.md"
         if paths.is_frozen():
-            frozen = paths.resource_dir() / "docs" / "answers.md"
+            frozen = paths.resource_dir() / "docs" / "answers-fa.md"
             if frozen.exists():
                 path = frozen
         if path.exists():
