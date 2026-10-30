@@ -26,3 +26,6 @@ secrets.*
 config.ini
 *.zip
 PersianLedger-v*-portable.zip
+PHASE2_SCOPE.md
+TASKS_CLIENT_FEEDBACK.md
+TASKS_ROUND2.md

@@ -91,7 +91,3 @@ PostgreSQL cases are skipped unless `PL_TEST_PG_URL` is set.
 ## Limitations
 
 The interface is Persian and right-to-left because that is the product. This README is the English overview. Network access from outside the office, and a VPN, are not part of the current server guide.
-
-## License
-
-See the repository license file if one is present.
