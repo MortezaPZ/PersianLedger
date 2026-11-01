@@ -91,3 +91,13 @@ PostgreSQL cases are skipped unless `PL_TEST_PG_URL` is set.
 ## Limitations
 
 The interface is Persian and right-to-left because that is the product. This README is the English overview. Network access from outside the office, and a VPN, are not part of the current server guide.
+
+## Folder guides
+
+- [`app/`](<app/README.md>)
+- [`deploy/`](<deploy/README.md>)
+- [`docs/`](<docs/README.md>)
+- [`migrations/`](<migrations/README.md>)
+- [`packaging/`](<packaging/README.md>)
+- [`scripts/`](<scripts/README.md>)
+- [`tests/`](<tests/README.md>)
