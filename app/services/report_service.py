@@ -69,6 +69,34 @@ class StatementResult:
         return not self.rows
 
 
+@dataclass
+class MatrixCurrencyTotals:
+    debit_turnover: Decimal = ZERO
+    credit_turnover: Decimal = ZERO
+    debit_balance: Decimal = ZERO
+    credit_balance: Decimal = ZERO
+
+
+@dataclass
+class MoeinMatrixRow:
+    account_id: int
+    account_code: str
+    account_name: str
+    amounts: dict[int, MatrixCurrencyTotals] = field(default_factory=dict)
+
+
+@dataclass
+class MoeinMatrixResult:
+    title: str
+    subtitle: str
+    currencies: list[CurrencyColumn]
+    rows: list[MoeinMatrixRow]
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.rows
+
+
 def _apply_scope(stmt: Select, flt: StatementFilter) -> Select:
     stmt = stmt.join(Document, DocumentLine.document_id == Document.id)
     if flt.include_drafts:
@@ -239,3 +267,91 @@ def party_statement(session: Session, flt: StatementFilter) -> StatementResult:
     result = account_statement(session, cloned)
     result.title = title
     return result
+
+
+def tafsili_descendant_ids(session: Session, tafsili_id: int) -> list[int]:
+    """Return a node and every descendant, retaining balances posted before it had children."""
+    tree = select(Tafsili.id.label("id")).where(Tafsili.id == tafsili_id).cte(
+        "tafsili_descendants", recursive=True
+    )
+    tree = tree.union_all(select(Tafsili.id).join(tree, Tafsili.parent_id == tree.c.id))
+    return list(session.execute(select(tree.c.id)).scalars())
+
+
+def tafsili_moein_matrix(
+    db: Session,
+    tafsili_id: int,
+    from_date: _dt.date | None,
+    to_date: _dt.date | None,
+    currency_ids: list[int] | None,
+) -> MoeinMatrixResult:
+    """Aggregate posted turnover and closing balances by معین and currency.
+
+    A selected parent tafsili includes every descendant. A selected leaf
+    includes only that node. Legacy postings on a former leaf remain in the
+    parent's roll-up after children are added. Amounts stay in separate currencies.
+    """
+    root = db.get(Tafsili, tafsili_id)
+    if root is None:
+        raise ValueError("تفصیلی انتخاب‌شده یافت نشد.")
+
+    descendants = tafsili_descendant_ids(db, tafsili_id)
+    stmt = (
+        select(
+            Account.id,
+            Account.code,
+            Account.name,
+            DocumentLine.currency_id,
+            Document.date_g,
+            DocumentLine.debit,
+            DocumentLine.credit,
+        )
+        .join(Document, DocumentLine.document_id == Document.id)
+        .join(Account, DocumentLine.account_id == Account.id)
+        .where(
+            Document.status == DocumentStatus.POSTED,
+            Account.level == 2,
+            Account.is_postable.is_(True),
+            or_(DocumentLine.tafsili1_id.in_(descendants), DocumentLine.tafsili2_id.in_(descendants)),
+        )
+    )
+    if to_date:
+        stmt = stmt.where(Document.date_g <= to_date)
+    if currency_ids:
+        stmt = stmt.where(DocumentLine.currency_id.in_(currency_ids))
+    stmt = stmt.order_by(Account.code, DocumentLine.currency_id, Document.date_g)
+
+    buckets: dict[tuple[int, int], list[Decimal]] = {}
+    accounts: dict[int, tuple[str, str]] = {}
+    used_currencies: set[int] = set()
+    for account_id, code, name, currency_id, date_g, debit_raw, credit_raw in db.execute(stmt):
+        debit, credit = money.parse(debit_raw), money.parse(credit_raw)
+        bucket = buckets.setdefault((account_id, currency_id), [ZERO, ZERO, ZERO])
+        if from_date is None or date_g >= from_date:
+            bucket[0] += debit
+            bucket[1] += credit
+        bucket[2] += debit - credit
+        accounts[account_id] = (code, name)
+        used_currencies.add(currency_id)
+
+    rows_by_account: dict[int, MoeinMatrixRow] = {}
+    for (account_id, currency_id), (debit, credit, balance) in buckets.items():
+        row = rows_by_account.setdefault(
+            account_id,
+            MoeinMatrixRow(account_id, *accounts[account_id]),
+        )
+        row.amounts[currency_id] = MatrixCurrencyTotals(
+            debit_turnover=debit,
+            credit_turnover=credit,
+            debit_balance=max(balance, ZERO),
+            credit_balance=max(-balance, ZERO),
+        )
+
+    columns = _currency_columns(db, set(currency_ids) if currency_ids else used_currencies)
+    dates = " تا ".join(value.isoformat() if value else "" for value in (from_date, to_date))
+    return MoeinMatrixResult(
+        "گردش حساب‌های معین به تفکیک تفصیلی",
+        f"{root.display} | {dates}".strip(" |"),
+        columns,
+        list(rows_by_account.values()),
+    )

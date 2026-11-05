@@ -6,11 +6,12 @@ from decimal import Decimal
 
 from PySide6.QtCore import QAbstractTableModel, QEvent, QModelIndex, Qt, Signal
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QComboBox, QCompleter, QStyledItemDelegate, QStyle
+from PySide6.QtWidgets import QComboBox, QCompleter, QStyledItemDelegate, QStyle, QToolButton
 
 from app.domain import money
 from app.ui import theme
 from app.ui.refdata import RefData
+from app.ui.widgets.tree_picker import TreeChoice, TreePickerDialog
 
 COL_NO, COL_ACCOUNT, COL_T1, COL_T2, COL_CURRENCY, COL_DEBIT, COL_CREDIT, COL_DESC = range(8)
 HEADERS = ("ردیف", "سرفصل", "تفصیلی ۱", "تفصیلی ۲", "ارز", "بدهکار", "بستانکار", "شرح")
@@ -213,6 +214,32 @@ class LineGridModel(QAbstractTableModel):
         return {cid: (d, c) for cid, (d, c) in result.items()}
 
 
+class TreePickerCombo(QComboBox):
+    """Autocomplete combo with a small in-cell tree-browser button."""
+
+    treeRequested = Signal()
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.combo = self
+        self.tree_button = QToolButton(self)
+        self.tree_button.setText("…")
+        self.tree_button.setToolTip("انتخاب از درخت")
+        self.tree_button.setFocusPolicy(Qt.NoFocus)
+        self.tree_button.clicked.connect(self.treeRequested.emit)
+
+    def setEditable(self, editable: bool) -> None:
+        super().setEditable(editable)
+        if editable and self.lineEdit():
+            self.lineEdit().setTextMargins(0, 0, 24, 0)
+            self.tree_button.raise_()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.tree_button.setGeometry(max(0, self.width() - 24), 1, 22, max(1, self.height() - 2))
+        self.tree_button.raise_()
+
+
 class PickerDelegate(QStyledItemDelegate):
     """Single-click combo with a visible drop-down arrow."""
 
@@ -220,7 +247,7 @@ class PickerDelegate(QStyledItemDelegate):
     requestNewTafsili = Signal(int, int)
 
     def createEditor(self, parent, option, index):
-        combo = QComboBox(parent)
+        combo = TreePickerCombo(parent)
         combo.setEditable(True)
         combo.setInsertPolicy(QComboBox.NoInsert)
         combo.setMaxVisibleItems(16)
@@ -230,14 +257,33 @@ class PickerDelegate(QStyledItemDelegate):
         completer.setFilterMode(Qt.MatchContains)
         completer.setCompletionMode(QCompleter.PopupCompletion)
         self._fill(combo, index)
-        combo.activated.connect(lambda _i, editor=combo: self._commit(editor))
+        combo.treeRequested.connect(lambda widget=combo, cell=index: self._browse(widget, cell))
+        combo.activated.connect(lambda _i, widget=combo: self._commit(widget))
         return combo
+
+    @staticmethod
+    def _combo(editor) -> QComboBox:
+        return getattr(editor, "combo", editor)
+
+    def tree_choices(self, index: QModelIndex) -> list[TreeChoice]:
+        return []
+
+    def _browse(self, editor: QComboBox, index: QModelIndex) -> None:
+        choices = self.tree_choices(index)
+        if not choices:
+            return
+        dialog = TreePickerDialog("انتخاب از درخت", choices, editor.currentData(), editor)
+        if dialog.exec() and dialog.selected_id is not None:
+            pos = editor.findData(dialog.selected_id)
+            if pos >= 0:
+                editor.setCurrentIndex(pos)
+                self._commit(editor)
 
     def _fill(self, combo: QComboBox, index: QModelIndex) -> None:
         raise NotImplementedError
 
     def setModelData(self, editor, model, index) -> None:
-        combo: QComboBox = editor
+        combo = self._combo(editor)
         text = (combo.currentText() or "").strip()
         data = combo.currentData()
         if text and (data is None or (combo.itemText(combo.currentIndex()) or "").strip() != text):
@@ -277,6 +323,22 @@ class AccountDelegate(PickerDelegate):
             if pos >= 0:
                 combo.setCurrentIndex(pos)
 
+    def tree_choices(self, index: QModelIndex) -> list[TreeChoice]:
+        model: LineGridModel = index.model()
+        eligible = {account.id for account in _moeins_for_line(model.ref, model.rows[index.row()])}
+        visible = set(eligible)
+        by_id = model.ref.account_by_id
+        for ident in list(eligible):
+            parent = by_id.get(ident).parent if ident in by_id else None
+            while parent is not None:
+                visible.add(parent.id)
+                parent = parent.parent
+        return [
+            (account.id, account.posting_display, account.parent_id, account.id in eligible)
+            for account in sorted(model.ref.accounts, key=lambda item: item.code)
+            if account.id in visible
+        ]
+
 
 def _moeins_for_line(ref, row: LineRow) -> list:
     """With a تفصیلی chosen, only معین accounts linked to it. Otherwise every معین."""
@@ -303,7 +365,7 @@ class TafsiliDelegate(PickerDelegate):
             self.requestConfigure.emit(index.row(), self.slot)
             return
         combo.addItem("", None)
-        items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.tafsilis
+        items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.final_tafsilis()
         for item in items:
             combo.addItem(item.display, item.id)
         combo.addItem(NEW_TAFSILI_LABEL, NEW_TAFSILI)
@@ -314,11 +376,29 @@ class TafsiliDelegate(PickerDelegate):
                 combo.setCurrentIndex(pos)
 
     def setModelData(self, editor, model, index) -> None:
-        value = editor.currentData()
+        value = self._combo(editor).currentData()
         if value == NEW_TAFSILI:
             self.requestNewTafsili.emit(index.row(), self.slot)
             return
         super().setModelData(editor, model, index)
+
+    def tree_choices(self, index: QModelIndex) -> list[TreeChoice]:
+        model: LineGridModel = index.model()
+        row = model.rows[index.row()]
+        items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.final_tafsilis()
+        eligible = {item.id for item in items}
+        visible = set(eligible)
+        by_id = model.ref.tafsili_by_id
+        for ident in list(eligible):
+            parent = by_id.get(ident).parent if ident in by_id else None
+            while parent is not None:
+                visible.add(parent.id)
+                parent = parent.parent
+        return [
+            (item.id, item.display, item.parent_id, item.id in eligible)
+            for item in sorted(model.ref.tafsilis, key=lambda node: node.code)
+            if item.id in visible
+        ]
 
 
 class CurrencyDelegate(PickerDelegate):

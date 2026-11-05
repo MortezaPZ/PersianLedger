@@ -79,6 +79,37 @@ def journal_html(result) -> str:
     return f"<html dir='rtl'><body><h2>{result.title}</h2><p>{result.subtitle}</p>{_table(headers, rows)}</body></html>"
 
 
+def tafsili_moein_matrix_html(result) -> str:
+    headers = ["کد معین", "نام معین"]
+    for col in result.currencies:
+        headers.extend(
+            [
+                f"{col.code} گردش بد",
+                f"{col.code} گردش بس",
+                f"{col.code} مانده بد",
+                f"{col.code} مانده بس",
+            ]
+        )
+    rows = []
+    for row in result.rows:
+        cells = [row.account_code, row.account_name]
+        for col in result.currencies:
+            totals = row.amounts.get(col.id)
+            if totals is None:
+                cells.extend(["", "", "", ""])
+            else:
+                cells.extend(
+                    [
+                        money.format_amount(totals.debit_turnover, col.decimals, True),
+                        money.format_amount(totals.credit_turnover, col.decimals, True),
+                        money.format_amount(totals.debit_balance, col.decimals, True),
+                        money.format_amount(totals.credit_balance, col.decimals, True),
+                    ]
+                )
+        rows.append(cells)
+    return f"<html dir='rtl'><body><h2>{result.title}</h2><p>{result.subtitle}</p>{_table(headers, rows)}</body></html>"
+
+
 def income_statement_html(result) -> str:
     headers = ["کد", "عنوان"] + [col.code for col in result.currencies]
 

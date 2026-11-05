@@ -27,7 +27,9 @@ class RefData:
 
     def reload(self, session: Session) -> None:
         self.accounts = account_service.all_accounts(session, include_inactive=True)
-        self.postable = [a for a in self.accounts if a.is_postable and a.is_active]
+        self.postable = [
+            a for a in self.accounts if a.is_postable and a.level == 2 and a.is_active and not a.children
+        ]
         self.currencies = master_data.currencies(session)
         self.groups = master_data.tafsili_groups(session)
         self.tafsilis = master_data.tafsilis(session)
@@ -57,6 +59,13 @@ class RefData:
                 seen[item.id] = item
         return list(seen.values())
 
+    def final_tafsilis(self) -> list[Tafsili]:
+        return [
+            item
+            for item in self.tafsilis
+            if not item.children and all(node.is_active for node in self._tafsili_path(item))
+        ]
+
     def tafsilis_for(self, account_id: int | None, slot: int) -> list[Tafsili]:
         account = self.account_by_id.get(account_id or 0)
         if account is None:
@@ -65,11 +74,27 @@ class RefData:
         groups = {r.tafsili_group_id for r in account.tafsili_rules if r.slot == slot and not r.tafsili_id}
         if not specific and not groups:
             return []
-        return [
-            t
-            for t in self.tafsilis
-            if t.is_active and (t.id in specific or bool(t.group_ids & groups))
-        ]
+        allowed: list[Tafsili] = []
+        for item in self.tafsilis:
+            if item.children:
+                continue
+            path = self._tafsili_path(item)
+            if not all(node.is_active for node in path):
+                continue
+            if any(node.id in specific for node in path) or any(node.group_ids & groups for node in path):
+                allowed.append(item)
+        return allowed
+
+    @staticmethod
+    def _tafsili_path(item: Tafsili) -> list[Tafsili]:
+        path = []
+        current: Tafsili | None = item
+        seen: set[int] = set()
+        while current is not None and current.id not in seen:
+            seen.add(current.id)
+            path.append(current)
+            current = current.parent
+        return path
 
     def tafsilis_for_account(self, account_id: int | None) -> list[Tafsili]:
         """تفصیلی‌های مجاز روی این معین، در هر خانهٔ سند."""
@@ -100,9 +125,11 @@ class RefData:
             matched = False
             for rule in account.tafsili_rules:
                 if rule.tafsili_id:
-                    matched = rule.tafsili_id == item.id
+                    matched = any(node.id == rule.tafsili_id for node in self._tafsili_path(item))
                 else:
-                    matched = rule.tafsili_group_id in item.group_ids
+                    matched = any(
+                        rule.tafsili_group_id in node.group_ids for node in self._tafsili_path(item)
+                    )
                 if matched:
                     break
             if matched:

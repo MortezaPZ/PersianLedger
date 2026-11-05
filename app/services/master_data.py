@@ -261,7 +261,11 @@ def tafsilis(
     group_ids: list[int] | None = None,
 ) -> list[Tafsili]:
     """`group_ids` matches a tafsili that is in ANY of the given groups."""
-    stmt = select(Tafsili).options(selectinload(Tafsili.memberships))
+    stmt = select(Tafsili).options(
+        selectinload(Tafsili.memberships),
+        selectinload(Tafsili.parent),
+        selectinload(Tafsili.children),
+    )
     if group_ids:
         stmt = stmt.where(
             Tafsili.id.in_(select(TafsiliGroupMember.tafsili_id).where(TafsiliGroupMember.group_id.in_(group_ids)))
@@ -345,6 +349,7 @@ def create_tafsili(
     code: str,
     name: str,
     group_id: int,
+    parent_id: int | None = None,
     phone: str | None = None,
     national_id: str | None = None,
     address: str | None = None,
@@ -364,9 +369,11 @@ def create_tafsili(
     group = session.get(TafsiliGroup, group_id)
     if group is None:
         raise ValidationError("گروه تفصیلی انتخاب نشده است.")
+    parent = _tafsili_parent(session, parent_id)
     item = Tafsili(
         code=code,
         name=name,
+        parent=parent,
         group_id=group_id,
         phone=phone,
         national_id=national_id,
@@ -387,6 +394,27 @@ def create_tafsili(
     return item
 
 
+def _tafsili_parent(session: Session, parent_id: int | None, item_id: int | None = None) -> Tafsili | None:
+    if parent_id is None:
+        return None
+    parent = session.get(Tafsili, parent_id)
+    if parent is None:
+        raise ValidationError("تفصیلی والد انتخاب‌شده یافت نشد.")
+    current = parent
+    visited: set[int] = set()
+    while current is not None:
+        if current.id == item_id:
+            raise ValidationError("انتخاب این والد باعث ایجاد چرخه در درخت تفصیلی می‌شود.")
+        if current.id in visited:
+            raise ValidationError("ساختار والد و فرزند تفصیلی معتبر نیست.")
+        visited.add(current.id)
+        current = current.parent
+    return parent
+
+
+_PARENT_UNSET = object()
+
+
 def update_tafsili(
     session: Session,
     item: Tafsili,
@@ -394,6 +422,7 @@ def update_tafsili(
     code: str | None = None,
     name: str | None = None,
     group_id: int | None = None,
+    parent_id: object = _PARENT_UNSET,
     extra_group_ids: list[int] | None = None,
     phone: str | None = None,
     national_id: str | None = None,
@@ -418,6 +447,10 @@ def update_tafsili(
         if in_use:
             raise InUseError("این تفصیلی سند دارد؛ گروه اصلی آن قابل تغییر نیست.")
         item.group_id = group_id
+    if parent_id is not _PARENT_UNSET:
+        new_parent_id = int(parent_id) if parent_id is not None else None
+        parent = _tafsili_parent(session, new_parent_id, item.id)
+        item.parent = parent
     if extra_group_ids is not None:
         set_tafsili_groups(session, item, extra_group_ids, user_id)
     elif group_id is not None:
@@ -439,6 +472,8 @@ def update_tafsili(
 
 def delete_tafsili(session: Session, item: Tafsili, user_id: int | None = None) -> None:
     auth_service.require(session, user_id, Perm.MASTER_EDIT)
+    if item.children:
+        raise InUseError(f"تفصیلی «{item.display}» فرزند دارد و حذف نمی‌شود. ابتدا فرزندان را منتقل یا حذف کنید.")
     if tafsili_in_use(session, item.id):
         raise InUseError(f"تفصیلی «{item.display}» سند دارد و حذف نمی‌شود. آن را غیرفعال کنید.")
     audit.record(

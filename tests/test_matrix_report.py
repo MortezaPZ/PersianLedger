@@ -54,23 +54,29 @@ def test_matrix_rolls_up_descendants_by_moein_and_keeps_currencies_separate(db_s
     from_date = year.start_date_g + dt.timedelta(days=5)
     to_date = year.start_date_g + dt.timedelta(days=20)
 
-    _post_line(db_session, year=year, number=7001, date=year.start_date_g, account=cash, tafsili=leaf_a, currency=irr, debit=3)
+    # Legacy rows on a node remain visible after that node becomes a parent.
+    _post_line(db_session, year=year, number=7001, date=year.start_date_g, account=cash, tafsili=root, currency=irr, debit=2)
+    _post_line(db_session, year=year, number=7006, date=year.start_date_g, account=cash, tafsili=leaf_a, currency=irr, debit=3)
     _post_line(db_session, year=year, number=7002, date=from_date, account=cash, tafsili=leaf_a, currency=irr, debit=10)
     _post_line(db_session, year=year, number=7003, date=from_date, account=cash, tafsili=leaf_b, currency=irr, credit=4)
     _post_line(db_session, year=year, number=7004, date=from_date, account=bank, tafsili=leaf_a, currency=usd, debit=2)
     _post_line(db_session, year=year, number=7005, date=from_date, account=cash, tafsili=outside, currency=irr, debit=99)
+    _post_line(db_session, year=year, number=7007, date=from_date, account=bank, tafsili=leaf_b, currency=usd, credit=5)
 
     result = tafsili_moein_matrix(db_session, root.id, from_date, to_date, None)
     rows = {row.account_id: row for row in result.rows}
     cash_irr = rows[cash.id].amounts[irr.id]
     bank_usd = rows[bank.id].amounts[usd.id]
 
-    assert cash_irr.debit == Decimal("10")
-    assert cash_irr.credit == Decimal("4")
-    assert cash_irr.balance == Decimal("9")
-    assert bank_usd.debit == Decimal("2")
-    assert bank_usd.credit == Decimal("0")
-    assert cash_irr.debit != bank_usd.debit
+    assert cash_irr.debit_turnover == Decimal("10")
+    assert cash_irr.credit_turnover == Decimal("4")
+    assert cash_irr.debit_balance == Decimal("11")
+    assert cash_irr.credit_balance == Decimal("0")
+    assert bank_usd.debit_turnover == Decimal("2")
+    assert bank_usd.credit_turnover == Decimal("5")
+    assert bank_usd.debit_balance == Decimal("0")
+    assert bank_usd.credit_balance == Decimal("3")
+    assert bank_usd.debit_turnover != cash_irr.debit_turnover
     assert set(rows) == {cash.id, bank.id}
 
 
@@ -91,5 +97,27 @@ def test_matrix_leaf_filter_excludes_sibling_descendants(db_session):
 
     result = tafsili_moein_matrix(db_session, chosen.id, date, date, [irr.id])
     row = next(row for row in result.rows if row.account_id == cash.id)
-    assert row.amounts[irr.id].debit == Decimal("5")
-    assert row.amounts[irr.id].balance == Decimal("5")
+    assert row.amounts[irr.id].debit_turnover == Decimal("5")
+    assert row.amounts[irr.id].debit_balance == Decimal("5")
+
+
+def test_matrix_report_view_has_tree_date_currency_filters_and_four_amount_columns(qapp, tmp_path):
+    from app import bootstrap, config as config_module
+    from app.ui.context import AppContext
+    from app.ui.views.tafsili_moein_matrix_view import TafsiliMoeinMatrixView
+
+    data_dir = tmp_path / "matrix-ui-data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    cfg = config_module.AppConfig(data_dir=data_dir, sqlite_path=data_dir / "ledger.sqlite3")
+    context = AppContext(bootstrap.start(cfg))
+    view = TafsiliMoeinMatrixView(context)
+    selected = next(item for item in context.refdata.tafsilis if item.code == "1101")
+    view.tafsili.setCurrentIndex(view.tafsili.findData(selected.id))
+    view.run()
+
+    assert view._result.title == "گردش حساب‌های معین به تفکیک تفصیلی"
+    assert view.tree_button.text() == "درخت…"
+    assert view.from_date.gregorian() is not None
+    assert view.to_date.gregorian() is not None
+    assert view.model.columnCount() == 2 + 4 * len(view._result.currencies)
+    view.close()

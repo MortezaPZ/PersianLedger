@@ -109,6 +109,44 @@ def export_journal(path: Path, result) -> None:
     wb.save(path)
 
 
+def export_tafsili_moein_matrix(path: Path, result) -> None:
+    wb = _book()
+    ws = wb.active
+    ws.title = "گردش تفصیلی معین"
+    ws.cell(1, 1, result.title)
+    ws.cell(2, 1, result.subtitle)
+    headers = ["کد معین", "نام معین"]
+    for col in result.currencies:
+        headers.extend(
+            [
+                f"{col.code} گردش بدهکار",
+                f"{col.code} گردش بستانکار",
+                f"{col.code} مانده بدهکار",
+                f"{col.code} مانده بستانکار",
+            ]
+        )
+    _write_header(ws, 4, headers)
+    for row_no, row in enumerate(result.rows, start=5):
+        values = [row.account_code, row.account_name]
+        for col in result.currencies:
+            totals = row.amounts.get(col.id)
+            if totals is None:
+                values.extend([None, None, None, None])
+            else:
+                values.extend(
+                    [
+                        money.quantize(totals.debit_turnover, col.decimals),
+                        money.quantize(totals.credit_turnover, col.decimals),
+                        money.quantize(totals.debit_balance, col.decimals),
+                        money.quantize(totals.credit_balance, col.decimals),
+                    ]
+                )
+        for column, value in enumerate(values, start=1):
+            ws.cell(row_no, column, value)
+    _autosize(ws)
+    wb.save(path)
+
+
 def export_income_statement(path: Path, result) -> None:
     wb = _book()
     ws = wb.active

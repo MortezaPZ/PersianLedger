@@ -49,6 +49,7 @@ def all_accounts(session: Session, include_inactive: bool = False) -> list[Accou
         selectinload(Account.allowed_currencies),
         selectinload(Account.tafsili_rules),
         selectinload(Account.parent),
+        selectinload(Account.children),
     )
     if not include_inactive:
         stmt = stmt.where(Account.is_active.is_(True))

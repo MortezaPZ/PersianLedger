@@ -32,6 +32,7 @@ from app.ui.views.party_statement_view import PartyStatementView
 from app.ui.views.settings_view import SettingsView
 from app.ui.views.statement_view import StatementView
 from app.ui.views.tafsili_view import TafsiliView
+from app.ui.views.tafsili_moein_matrix_view import TafsiliMoeinMatrixView
 from app.ui.views.trial_balance_view import TrialBalanceView
 from app.version import APP_NAME_FA, APP_VERSION
 
@@ -51,6 +52,7 @@ SECTIONS = (
             ("trial", "تراز آزمایشی", "Ctrl+5", TrialBalanceView),
             ("journal", "دفتر روزنامه", "Ctrl+6", JournalView),
             ("ledger", "دفتر کل و معین", "Ctrl+7", LedgerView),
+            ("tafsili-moein-matrix", "گردش معین به تفکیک تفصیلی", "Ctrl+Shift+3", TafsiliMoeinMatrixView),
             ("party", "صورت وضعیت اشخاص", "Ctrl+8", PartyStatementView),
             ("income", "صورت سود و زیان", "Ctrl+Shift+2", IncomeStatementView),
         ),

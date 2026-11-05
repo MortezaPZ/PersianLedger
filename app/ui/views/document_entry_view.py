@@ -94,6 +94,7 @@ class DocumentEntryView(BaseView):
             | QAbstractItemView.AnyKeyPressed
         )
         self.table.setAlternatingRowColors(True)
+        self.table.selectionModel().currentRowChanged.connect(lambda *_: self._refresh_balance())
         self.body.addWidget(self.table, 1)
         buttons = QHBoxLayout()
         add = QPushButton("افزودن ردیف")
@@ -311,7 +312,18 @@ class DocumentEntryView(BaseView):
             if diff:
                 ok = False
             parts.append(f"{cur.code}: بد {debit} / بس {credit}")
-        self.balance.setText("  |  ".join(parts) or "ردیفی وارد نشده")
+        balance_text = "  |  ".join(parts) or "ردیفی وارد نشده"
+        index = self.table.currentIndex()
+        if index.isValid() and 0 <= index.row() < len(self.model.rows):
+            row = self.model.rows[index.row()]
+            account = self.ctx.refdata.account_by_id.get(row.account_id or 0)
+            tafsili1 = self.ctx.refdata.tafsili_by_id.get(row.tafsili1_id or 0)
+            tafsili2 = self.ctx.refdata.tafsili_by_id.get(row.tafsili2_id or 0)
+            line = [f"حساب: {account.posting_display}" if account else "حساب: —"]
+            line.append(f"تفصیلی ۱: {tafsili1.display if tafsili1 else '—'}")
+            line.append(f"تفصیلی ۲: {tafsili2.display if tafsili2 else '—'}")
+            balance_text += "\nسطر فعال — " + " | ".join(line)
+        self.balance.setText(balance_text)
         if not parts:
             name = "BalanceBar"
         else:

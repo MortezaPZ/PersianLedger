@@ -101,7 +101,11 @@ def _load_accounts(session: Session, ids: set[int]) -> dict[int, Account]:
         return {}
     rows = session.execute(
         select(Account)
-        .options(selectinload(Account.allowed_currencies), selectinload(Account.tafsili_rules))
+        .options(
+            selectinload(Account.allowed_currencies),
+            selectinload(Account.tafsili_rules),
+            selectinload(Account.children),
+        )
         .where(Account.id.in_(ids))
     ).scalars()
     return {a.id: a for a in rows}
@@ -111,7 +115,13 @@ def _load_tafsilis(session: Session, ids: set[int]) -> dict[int, Tafsili]:
     if not ids:
         return {}
     rows = session.execute(
-        select(Tafsili).options(selectinload(Tafsili.memberships)).where(Tafsili.id.in_(ids))
+        select(Tafsili)
+        .options(
+            selectinload(Tafsili.memberships),
+            selectinload(Tafsili.parent),
+            selectinload(Tafsili.children),
+        )
+        .where(Tafsili.id.in_(ids))
     ).scalars()
     return {t.id: t for t in rows}
 
@@ -129,11 +139,26 @@ def _check_slot(
         raise ValidationError(f"ردیف {row}: سرفصل «{account.name}» به تفصیلی {slot} نیاز دارد.")
     if tafsili is None:
         return
+    if tafsili.children:
+        raise ValidationError("تفصیلی نهایی نیست. در سند حسابداری فقط تفصیلی در پایین‌ترین سطح مجاز است.")
     if not slot_rules:
+        if slot == 2:
+            raise ValidationError("خطا: حساب طبق تعریف فاقد تفصیلی ۲ است.")
         raise ValidationError(f"ردیف {row}: برای سرفصل «{account.name}» تفصیلی {slot} تعریف نشده است.")
     specific = {r.tafsili_id for r in slot_rules if r.tafsili_id}
     groups = {r.tafsili_group_id for r in slot_rules if not r.tafsili_id}
-    allowed = tafsili.id in specific or bool(tafsili.group_ids & groups)
+    ancestor_ids: set[int] = set()
+    inherited_groups: set[int] = set()
+    ancestry: list[Tafsili] = []
+    current: Tafsili | None = tafsili
+    while current is not None and current.id not in ancestor_ids:
+        ancestor_ids.add(current.id)
+        ancestry.append(current)
+        inherited_groups.update(current.group_ids)
+        current = current.parent
+    if any(not node.is_active for node in ancestry):
+        raise ValidationError(f"ردیف {row}: تفصیلی «{tafsili.name}» یا والد آن غیرفعال است.")
+    allowed = bool(ancestor_ids & specific) or bool(inherited_groups & groups)
     if not allowed:
         raise ValidationError(
             f"ردیف {row}: تفصیلی «{tafsili.name}» به سرفصل «{account.name}» وصل نیست."
@@ -168,6 +193,8 @@ def validate(session: Session, data: DocumentInput) -> None:
         account = accounts.get(line.account_id)
         if account is None:
             raise ValidationError(f"ردیف {index}: سرفصل انتخاب نشده است.")
+        if account.level != 2 or account.children:
+            raise ValidationError("حساب نهایی نیست. حساب باید در پایین‌ترین سطح خود باشد.")
         if not account.is_postable:
             raise ValidationError(f"ردیف {index}: «{account.display}» سرفصل کل است و سند به آن ثبت نمی‌شود.")
         if not account.is_active:

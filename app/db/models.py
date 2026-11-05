@@ -200,11 +200,15 @@ class Tafsili(Base):
     """Floating analytic account: person, fund, project, cost centre ..."""
 
     __tablename__ = "tafsilis"
-    __table_args__ = (Index("ix_tafsilis_group_id", "group_id"),)
+    __table_args__ = (
+        Index("ix_tafsilis_group_id", "group_id"),
+        Index("ix_tafsilis_parent_id", "parent_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("tafsilis.id"))
     group_id: Mapped[int] = mapped_column(ForeignKey("tafsili_groups.id"), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(40))
     national_id: Mapped[str | None] = mapped_column(String(20))
@@ -215,6 +219,8 @@ class Tafsili(Base):
     __mapper_args__ = {"version_id_col": row_version}
 
     group: Mapped[TafsiliGroup] = relationship(back_populates="items")
+    parent: Mapped[Tafsili | None] = relationship(remote_side="Tafsili.id", back_populates="children")
+    children: Mapped[list[Tafsili]] = relationship(back_populates="parent")
     memberships: Mapped[list[TafsiliGroupMember]] = relationship(
         back_populates="tafsili", cascade="all, delete-orphan", lazy="selectin"
     )
