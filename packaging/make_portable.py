@@ -55,9 +55,9 @@ program again. Details are in docs\\deploy-server.md.
 
 Updating
 
-1. Run the setup file and close the program first.
-2. The install reads data from the previous folder and does not delete it.
-3. Start the program.
+1. Close the program and extract the update ZIP.
+2. Run START-UPDATE.cmd and select the existing program folder.
+3. Start the program. The update replaces program files and leaves data/settings in place.
 
 Before a database structure change the program writes a backup, then
 updates the structure. Nothing is lost.

@@ -79,7 +79,7 @@ try {
     }
     Copy-Item -LiteralPath $newInternal -Destination $liveInternal -Recurse -Force
     Get-ChildItem -LiteralPath $update -Force | ForEach-Object {
-        if ($_.Name -in @("PersianLedger.exe", "_internal", "data")) {
+        if ($_.Name -in @("PersianLedger.exe", "_internal", "data", "Start-Update.ps1", "START-UPDATE.cmd", "UPDATE.txt")) {
             return
         }
         $dest = Join-Path $install $_.Name

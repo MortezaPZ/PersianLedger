@@ -1,22 +1,22 @@
 """Backup and restore of the whole ledger.
 
 The database is one SQLite file, so a backup is a consistent copy of that file.
-`VACUUM INTO` is used rather than a plain copy because it collapses the WAL into
-the destination, giving a file that opens cleanly on its own.
+SQLite's online backup API is used rather than a plain file copy so committed
+WAL content is included in the standalone destination.
 """
 from __future__ import annotations
 
 import datetime as _dt
-import gc
-import shutil
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 
 from app.config import AppConfig
 from app.domain.errors import LedgerError
+from app.db.sqlite_snapshot import replace_database, snapshot_engine, snapshot_file
 
 
 class BackupError(LedgerError):
@@ -47,7 +47,15 @@ class RestoreResult:
 
 
 def suggested_name(prefix: str = "backup") -> str:
-    return f"{prefix}-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.sqlite3"
+    return f"{prefix}-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.sqlite3"
+
+
+def remember_backup(cfg: AppConfig, path: Path) -> None:
+    cfg.last_backup_path = Path(path).resolve()
+    if cfg.configured:
+        from app import config as config_module
+
+        config_module.save(cfg)
 
 
 def create(engine: Engine, cfg: AppConfig, target: Path | None = None, user_id: int | None = None) -> BackupInfo:
@@ -64,16 +72,13 @@ def create(engine: Engine, cfg: AppConfig, target: Path | None = None, user_id: 
         auth_service.require(db, user_id, Perm.BACKUP)
     dest = Path(target).resolve() if target else (Path(cfg.backup_dir) / suggested_name()).resolve()
     dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
-        dest.unlink()
     try:
-        with engine.connect() as connection:
-            escaped = str(dest).replace("'", "''")
-            connection.exec_driver_sql(f"VACUUM INTO '{escaped}'")
+        snapshot_engine(engine, dest)
     except Exception as exc:
         raise BackupError("ساخت فایل پشتیبان انجام نشد.") from exc
     if not dest.is_file():
         raise BackupError(f"فایل پشتیبان در این مسیر ساخته نشد:\n{dest}")
+    remember_backup(cfg, dest)
     stat = dest.stat()
     return BackupInfo(dest, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime))
 
@@ -84,7 +89,7 @@ def inspect(path: Path) -> BackupInfo:
     if not source.is_file():
         raise BackupError(f"فایل پشتیبان پیدا نشد:\n{source}")
     try:
-        conn = sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)
+        conn = sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)
         try:
             names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         finally:
@@ -115,87 +120,102 @@ def restore(engine: Engine, cfg: AppConfig, source: Path, user_id: int | None = 
     with SASession(engine) as db:
         auth_service.require(db, user_id, Perm.RESTORE)
     inspect(source)
-    live = Path(cfg.sqlite_path)
+    live = Path(cfg.sqlite_path).resolve()
     safety = cfg.backup_dir / suggested_name("pre-restore")
-    if live.exists():
-        with engine.connect() as connection:
-            connection.execute(text("VACUUM INTO :path"), {"path": str(safety)})
-    engine.dispose()
-    gc.collect()
+    staged = live.with_name(f".{live.name}.restore-{uuid.uuid4().hex}.sqlite3")
     if live.exists():
         try:
-            live.unlink()
-        except PermissionError as exc:
-            raise BackupError(
-                "فایل دیتابیس در حال استفاده است. برنامه را ببندید و دوباره باز کنید، سپس بازیابی را تکرار کنید."
-            ) from exc
-    shutil.copy2(source, live)
-    wal = Path(str(live) + "-wal")
-    shm = Path(str(live) + "-shm")
-    for extra in (wal, shm):
-        if extra.exists():
-            extra.unlink()
+            snapshot_engine(engine, safety)
+        except Exception as exc:
+            raise BackupError("تهیه نسخه ایمنی از دیتابیس فعلی انجام نشد؛ بازیابی لغو شد.") from exc
     try:
-        conn = sqlite3.connect(f"file:{live.as_posix()}?mode=ro", uri=True)
+        snapshot_file(source, staged)
+        conn = sqlite3.connect(staged)
         try:
             check = conn.execute("PRAGMA integrity_check").fetchone()
             if not check or check[0] != "ok":
-                raise BackupError("فایل پشتیبان آسیب‌دیده است؛ دیتابیس قبلی دست‌نخورده ماند.")
+                raise BackupError("فایل پشتیبان آسیب‌دیده است؛ دیتابیس فعلی دست‌نخورده ماند.")
             documents = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
             posted = conn.execute("SELECT COUNT(*) FROM documents WHERE status='POSTED'").fetchone()[0]
             accounts = conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
             tafsilis = conn.execute("SELECT COUNT(*) FROM tafsilis").fetchone()[0]
         finally:
             conn.close()
-    except BackupError:
-        _put_safety_back(live, safety)
-        raise
     except sqlite3.DatabaseError as exc:
-        _put_safety_back(live, safety)
-        raise BackupError("فایل پشتیبان آسیب‌دیده است؛ دیتابیس قبلی دست‌نخورده ماند.") from exc
-    _upgrade_restored_file(cfg, live, safety)
-    return RestoreResult(safety, documents, posted, accounts, tafsilis)
+        raise BackupError("فایل پشتیبان آسیب‌دیده است؛ دیتابیس فعلی دست‌نخورده ماند.") from exc
+    except Exception as exc:
+        if isinstance(exc, BackupError):
+            raise
+        raise BackupError("خواندن فایل پشتیبان انجام نشد؛ دیتابیس فعلی دست‌نخورده ماند.") from exc
 
+    # Migrate the staged copy. The current database remains untouched until the
+    # backup has passed validation and every migration has committed.
+    from dataclasses import replace
 
-def _upgrade_restored_file(cfg: AppConfig, live: Path, safety: Path) -> None:
-    """Bring an older backup up to the schema this build understands.
-
-    If that migration fails, the database that was live before the restore is
-    put back. The caller must not be left on a half-upgraded file.
-    """
     from app.db import engine as engine_module
     from app.db import migrate
 
-    fresh = engine_module.build_engine(cfg.database_url())
+    staged_cfg = replace(cfg, sqlite_path=staged)
+    staged_engine = engine_module.build_engine(staged_cfg.database_url())
     try:
-        migrate.upgrade_to_head(fresh, cfg)
+        migrate.upgrade_to_head(staged_engine, staged_cfg)
     except Exception as exc:
-        fresh.dispose()
-        _put_safety_back(live, safety)
+        staged_engine.dispose()
+        staged.unlink(missing_ok=True)
+        Path(str(staged) + "-wal").unlink(missing_ok=True)
+        Path(str(staged) + "-shm").unlink(missing_ok=True)
+        Path(str(staged) + "-journal").unlink(missing_ok=True)
         raise BackupError(
-            "به‌روزرسانی ساختار فایل پشتیبان انجام نشد؛ دیتابیس قبلی دست‌نخورده ماند."
+            f"ساختار فایل پشتیبان به‌روزرسانی نشد؛ دیتابیس فعلی تغییر نکرد.\n{exc}"
         ) from exc
-    fresh.dispose()
+    staged_engine.dispose()
 
+    # Leave the staged SQLite file in rollback-journal mode so no stale WAL can
+    # be mistaken for pages from the database it replaces.
+    conn = sqlite3.connect(staged)
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("PRAGMA journal_mode=DELETE")
+        conn.commit()
+    finally:
+        conn.close()
 
-def _put_safety_back(live: Path, safety: Path) -> None:
-    if live.exists():
-        live.unlink(missing_ok=True)
-    if safety.exists():
-        shutil.copy2(safety, live)
+    engine.dispose()
+    try:
+        replace_database(staged, live)
+    except PermissionError as exc:
+        raise BackupError(
+            "فایل دیتابیس توسط برنامه دیگری در حال استفاده است؛ دیتابیس فعلی حفظ شد. "
+            "همه پنجره‌های دفتر مالی را ببندید و بازیابی را دوباره انجام دهید."
+        ) from exc
+    except OSError as exc:
+        raise BackupError(f"جایگزینی دیتابیس انجام نشد؛ دیتابیس فعلی حفظ شد.\n{exc}") from exc
+    remember_backup(cfg, Path(source))
+    return RestoreResult(safety, documents, posted, accounts, tafsilis)
 
 
 def list_backups(cfg: AppConfig) -> list[BackupInfo]:
-    items: list[BackupInfo] = []
-    for path in sorted(cfg.backup_dir.glob("*.sqlite3"), reverse=True):
-        stat = path.stat()
-        items.append(BackupInfo(path, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime)))
+    paths_to_scan = {
+        Path(cfg.backup_dir).resolve(),
+        (Path(cfg.data_dir) / "backups").resolve(),
+    }
+    if cfg.last_backup_path is not None:
+        paths_to_scan.add(Path(cfg.last_backup_path).expanduser().resolve().parent)
+    found: dict[Path, BackupInfo] = {}
+    for folder in paths_to_scan:
+        if not folder.is_dir():
+            continue
+        for path in folder.iterdir():
+            if not path.is_file() or path.suffix.lower() not in {".sqlite3", ".pgdump"}:
+                continue
+            resolved = path.resolve()
+            stat = resolved.stat()
+            found[resolved] = BackupInfo(
+                resolved, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime)
+            )
     if cfg.backend == "postgresql":
         from app.services import server_backup
 
-        items.extend(server_backup.list_backups(cfg))
-    else:
-        for path in sorted(cfg.backup_dir.glob("*.pgdump"), reverse=True):
-            stat = path.stat()
-            items.append(BackupInfo(path, stat.st_size, _dt.datetime.fromtimestamp(stat.st_mtime)))
-    return items
+        for item in server_backup.list_backups(cfg):
+            found[item.path.resolve()] = item
+    return sorted(found.values(), key=lambda item: (item.taken_at, item.path.name), reverse=True)

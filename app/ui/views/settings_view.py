@@ -332,7 +332,7 @@ class SettingsView(BaseView):
         for btn in (backup, quick, restore, folder):
             row.addWidget(btn)
         layout.addLayout(row)
-        self.backup_path_hint = QLabel(f"محل ذخیرهٔ پشتیبان‌ها: {self.ctx.config.backup_dir}")
+        self.backup_path_hint = QLabel(self._backup_path_text())
         self.backup_path_hint.setObjectName("PageHint")
         self.backup_path_hint.setWordWrap(True)
         layout.addWidget(self.backup_path_hint)
@@ -411,7 +411,7 @@ class SettingsView(BaseView):
             for col, value in enumerate((y.title, y.start_date_j, y.end_date_j, "بسته" if y.is_closed else "باز")):
                 self.year_table.setItem(r, col, QTableWidgetItem(value))
         backups = backup_service.list_backups(self.ctx.config)
-        self.backup_path_hint.setText(f"محل ذخیرهٔ پشتیبان‌ها: {self.ctx.config.backup_dir}")
+        self.backup_path_hint.setText(self._backup_path_text())
         self.backup_table.setRowCount(len(backups))
         for r, b in enumerate(backups):
             self.backup_table.setItem(r, 0, QTableWidgetItem(b.path.name))
@@ -494,7 +494,9 @@ class SettingsView(BaseView):
             self.warn(str(exc))
 
     def backup_as(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "تهیه پشتیبان", str(self.ctx.config.backup_dir / backup_service.suggested_name()), "پشتیبان (*.sqlite3 *.pgdump)")
+        last = self.ctx.config.last_backup_path
+        folder = last.parent if last is not None else self.ctx.config.backup_dir
+        path, _ = QFileDialog.getSaveFileName(self, "تهیه پشتیبان", str(folder / backup_service.suggested_name()), "پشتیبان (*.sqlite3 *.pgdump)")
         if not path:
             return
         try:
@@ -505,7 +507,9 @@ class SettingsView(BaseView):
             self.warn(str(exc))
 
     def restore(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "بازیابی از فایل", str(self.ctx.config.backup_dir), "پشتیبان (*.sqlite3 *.pgdump)")
+        last = self.ctx.config.last_backup_path
+        start = last if last is not None and last.exists() else self.ctx.config.backup_dir
+        path, _ = QFileDialog.getOpenFileName(self, "بازیابی از فایل", str(start), "پشتیبان (*.sqlite3 *.pgdump)")
         if not path or not self.confirm("بازیابی فایل پشتیبان، دیتابیس فعلی را جایگزین می‌کند. ادامه می‌دهید؟"):
             return
         self.apply_restore(Path(path))
@@ -529,6 +533,13 @@ class SettingsView(BaseView):
             self.warn(str(exc))
         except Exception as exc:
             self.report_error(exc)
+
+    def _backup_path_text(self) -> str:
+        text = f"محل پیش‌فرض پشتیبان‌ها: {self.ctx.config.backup_dir}"
+        last = self.ctx.config.last_backup_path
+        if last is not None:
+            text += f"\nآخرین فایل پشتیبان: {last}"
+        return text
 
     def purge_test_documents(self) -> None:
         year_id = self.purge_year.currentData()

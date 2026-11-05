@@ -64,6 +64,17 @@ def default_data_dir() -> Path:
     return p
 
 
+def default_backup_dir(data_dir: Path | None = None) -> Path:
+    """Keep installed-build backups in a visible user folder on Windows."""
+    if is_frozen() and not is_portable():
+        profile = Path(os.environ.get("USERPROFILE") or Path.home())
+        p = profile / "Documents" / APP_ID / "Backups"
+    else:
+        p = Path(data_dir or default_data_dir()) / "backups"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path

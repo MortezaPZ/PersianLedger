@@ -25,6 +25,8 @@ class AppConfig:
     attachments_dir_override: Path | None = None
     pg_bin_dir: Path | None = None
     server_backup_dir: Path | None = None
+    backup_dir_override: Path | None = None
+    last_backup_path: Path | None = None
     data_dir: Path | None = None
     dark_mode: bool = False
     configured: bool = False
@@ -41,7 +43,9 @@ class AppConfig:
 
     @property
     def backup_dir(self) -> Path:
-        return paths.ensure_dir(Path(self.data_dir) / "backups")
+        if self.backup_dir_override is not None:
+            return paths.ensure_dir(Path(self.backup_dir_override))
+        return paths.default_backup_dir(Path(self.data_dir))
 
     @property
     def export_dir(self) -> Path:
@@ -121,6 +125,10 @@ def load(path: Path | None = None) -> AppConfig:
         cfg.pg_bin_dir = Path(server["pg_bin_dir"])
     if server.get("server_backup_dir"):
         cfg.server_backup_dir = Path(server["server_backup_dir"])
+    if db.get("backup_dir_override"):
+        cfg.backup_dir_override = Path(db["backup_dir_override"])
+    if db.get("last_backup_path"):
+        cfg.last_backup_path = Path(db["last_backup_path"])
     ui = parser["ui"] if parser.has_section("ui") else {}
     cfg.dark_mode = ui.get("dark_mode", "false").strip().lower() in {"1", "true", "yes"}
     if not cfg.pg_password:
@@ -147,6 +155,8 @@ def save(cfg: AppConfig, path: Path | None = None) -> None:
         "pg_sslmode": cfg.pg_sslmode,
         "pg_connect_timeout": str(cfg.pg_connect_timeout),
         "attachments_dir_override": str(cfg.attachments_dir_override or ""),
+        "backup_dir_override": str(cfg.backup_dir_override or ""),
+        "last_backup_path": str(cfg.last_backup_path or ""),
     }
     parser["server"] = {
         "pg_bin_dir": str(cfg.pg_bin_dir or ""),

@@ -44,6 +44,37 @@ def _stamp_old_backup(folder: Path) -> Path:
                 "'2026-01-01T00:00:00', 1)"
             )
         )
+        connection.execute(
+            text(
+                "INSERT INTO currencies (code, name, symbol, decimals, sort_order, is_active, is_locked) "
+                "VALUES ('IRR', 'ریال', 'ریال', 0, 0, 1, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO accounts (code, name, parent_id, group_id, level, account_type, nature, "
+                "is_postable, tafsili1_required, tafsili2_required, is_active, row_version) "
+                "VALUES ('1', 'دارایی', NULL, 1, 1, 'ASSET', 'DEBIT', 0, 0, 0, 1, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO accounts (code, name, parent_id, group_id, level, account_type, nature, "
+                "is_postable, tafsili1_required, tafsili2_required, is_active, row_version) "
+                "VALUES ('101', 'صندوق', 1, 1, 2, 'ASSET', 'DEBIT', 1, 0, 0, 1, 1)"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO account_currencies (account_id, currency_id) VALUES (2, 1)")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO document_lines (document_id, line_no, account_id, currency_id, debit, credit) "
+                "VALUES (1, 1, 2, 1, 10, 0)"
+            )
+        )
+        # Simulate the temporary table left behind by a failed 0.7.4 batch migration.
+        connection.execute(text("CREATE TABLE _alembic_tmp_accounts AS SELECT * FROM accounts"))
     engine.dispose()
     return cfg.sqlite_path
 
@@ -76,9 +107,17 @@ def test_restore_upgrades_old_backup(tmp_path: Path) -> None:
             role = connection.execute(text("SELECT role FROM users WHERE username='boss'")).scalar()
             description = connection.execute(text("SELECT description FROM documents")).scalar()
             current = connection.execute(text("SELECT COUNT(*) FROM users WHERE username='current'")).scalar()
+            accounts = connection.execute(text("SELECT COUNT(*) FROM accounts")).scalar()
+            lines = connection.execute(text("SELECT COUNT(*) FROM document_lines")).scalar()
+            stale_tables = connection.execute(
+                text("SELECT COUNT(*) FROM sqlite_master WHERE name='_alembic_tmp_accounts'")
+            ).scalar()
         assert revision == migrate.head_revision(cfg.database_url())
         assert role == "ADMIN"
         assert description == "old-invoice"
+        assert accounts == 2
+        assert lines == 1
+        assert stale_tables == 0
         assert current == 0
     finally:
         check.dispose()
@@ -93,7 +132,7 @@ def test_failed_upgrade_restores_previous_database(tmp_path: Path, monkeypatch: 
         raise RuntimeError("migration broke")
 
     monkeypatch.setattr(migrate, "upgrade_to_head", boom)
-    with pytest.raises(BackupError, match="دیتابیس قبلی دست‌نخورده ماند"):
+    with pytest.raises(BackupError, match="دیتابیس فعلی تغییر نکرد"):
         backup_service.restore(engine, cfg, source, user_id=None)
     check = engine_module.build_engine(cfg.database_url())
     try:
@@ -105,6 +144,23 @@ def test_failed_upgrade_restores_previous_database(tmp_path: Path, monkeypatch: 
         engine_module.dispose()
 
 
+def test_current_schema_cleans_leftover_alembic_batch_table(tmp_path: Path) -> None:
+    cfg, engine = _live(tmp_path / "live")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE _alembic_tmp_accounts AS SELECT * FROM accounts"
+        )
+
+    result = migrate.upgrade_to_head(engine, cfg)
+
+    assert result.applied
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT COUNT(*) FROM sqlite_master WHERE name='_alembic_tmp_accounts'")
+        ).scalar() == 0
+    assert migrate.upgrade_to_head(engine, cfg).applied is False
+
+
 def test_restore_refuses_newer_schema_and_keeps_live_data(tmp_path: Path) -> None:
     source = _stamp_old_backup(tmp_path / "old")
     cfg, engine = _live(tmp_path / "live")
@@ -114,7 +170,7 @@ def test_restore_refuses_newer_schema_and_keeps_live_data(tmp_path: Path) -> Non
         conn.commit()
     finally:
         conn.close()
-    with pytest.raises(BackupError, match="دیتابیس قبلی دست‌نخورده ماند"):
+    with pytest.raises(BackupError, match="دیتابیس فعلی تغییر نکرد"):
         backup_service.restore(engine, cfg, source, user_id=None)
     check = engine_module.build_engine(cfg.database_url())
     try:

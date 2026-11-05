@@ -1,5 +1,12 @@
 # PersianLedger changelog
 
+## 0.7.5
+
+- Database upgrades take a consistent SQLite snapshot, disable foreign keys during table rebuilds, and recover cleanly from an interrupted migration.
+- Restoring a backup validates and upgrades a staged copy before replacing the live database, so a failed restore leaves the current data in place.
+- Backups use SQLite's online backup API, are stored by default in a visible Documents folder for installed builds, and the most recently used backup location is remembered.
+- The update ZIP replaces application files in place without an installer or changing the existing database/configuration location.
+
 ## 0.7.4
 
 - New currency and fiscal-year buttons use dark text on a light blue background for clearer labels.
