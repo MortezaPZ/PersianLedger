@@ -91,6 +91,7 @@ class MoeinMatrixResult:
     subtitle: str
     currencies: list[CurrencyColumn]
     rows: list[MoeinMatrixRow]
+    tafsili_ids: tuple[int, ...] = ()
 
     @property
     def is_empty(self) -> bool:
@@ -354,4 +355,5 @@ def tafsili_moein_matrix(
         f"{root.display} | {dates}".strip(" |"),
         columns,
         list(rows_by_account.values()),
+        tuple(descendants),
     )

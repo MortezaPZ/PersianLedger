@@ -1,13 +1,23 @@
 """Currencies, fiscal years and the floating tafsili register."""
 from __future__ import annotations
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, select, update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import AppSetting, Currency, DocumentLine, FiscalYear, Tafsili, TafsiliGroup, TafsiliGroupMember
+from app.db.models import (
+    AppSetting,
+    Currency,
+    DocumentLine,
+    FiscalYear,
+    Tafsili,
+    TafsiliGroup,
+    TafsiliGroupMember,
+    TafsiliTreeMutex,
+)
 from app.domain import jalali
 from app.domain.enums import AuditAction
-from app.domain.errors import InUseError, ValidationError
+from app.domain.errors import ConcurrencyError, InUseError, ValidationError
 from app.services import audit, auth_service
 from app.domain.permissions import Perm
 
@@ -394,22 +404,95 @@ def create_tafsili(
     return item
 
 
-def _tafsili_parent(session: Session, parent_id: int | None, item_id: int | None = None) -> Tafsili | None:
+def _is_tree_lock_conflict(exc: DBAPIError, dialect: str) -> bool:
+    original = exc.orig
+    if dialect == "sqlite":
+        code = getattr(original, "sqlite_errorcode", None)
+        return (
+            (code is not None and (code & 0xFF) in (5, 6))
+            or "database is locked" in str(original).lower()
+        )
+    if dialect == "postgresql":
+        return getattr(original, "sqlstate", None) in {"40001", "40P01"}
+    return False
+
+
+def _fresh_parent_path_reaches(session: Session, item_id: int, parent_id: int) -> bool:
+    """Check a fresh connection after a lock conflict; bounded by visited IDs."""
+    current_id: int | None = parent_id
+    visited: set[int] = set()
+    with session.get_bind().connect() as connection:
+        while current_id is not None and current_id not in visited:
+            if current_id == item_id:
+                return True
+            visited.add(current_id)
+            current_id = connection.execute(
+                select(Tafsili.parent_id).where(Tafsili.id == current_id)
+            ).scalar_one_or_none()
+    return False
+
+
+def _lock_tafsili_tree(session: Session, item_id: int | None, parent_id: int) -> None:
+    """Serialize hierarchy edits through a DB row, across processes and devices."""
+    connection = session.connection()
+    dialect = connection.dialect.name
+    if dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as dialect_insert
+    elif dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as dialect_insert
+    else:
+        raise RuntimeError(f"Unsupported database for tafsili tree edits: {dialect}")
+
+    try:
+        with session.no_autoflush:
+            connection.execute(
+                dialect_insert(TafsiliTreeMutex)
+                .values(id=1, revision=0)
+                .on_conflict_do_nothing(index_elements=[TafsiliTreeMutex.id])
+            )
+            connection.execute(
+                update(TafsiliTreeMutex)
+                .where(TafsiliTreeMutex.id == 1)
+                .values(revision=TafsiliTreeMutex.revision + 1)
+            )
+    except DBAPIError as exc:
+        if not _is_tree_lock_conflict(exc, dialect):
+            raise
+        if item_id is not None and _fresh_parent_path_reaches(session, item_id, parent_id):
+            raise ValidationError("انتخاب این والد باعث ایجاد چرخه در درخت تفصیلی می‌شود.") from exc
+        raise ConcurrencyError("ساختار درخت تفصیلی") from exc
+
+
+def _tafsili_parent(
+    session: Session,
+    parent_id: int | None,
+    item_id: int | None = None,
+    *,
+    lock_acquired: bool = False,
+) -> Tafsili | None:
     if parent_id is None:
         return None
-    parent = session.get(Tafsili, parent_id)
-    if parent is None:
-        raise ValidationError("تفصیلی والد انتخاب‌شده یافت نشد.")
-    current = parent
+    if not lock_acquired:
+        _lock_tafsili_tree(session, item_id, parent_id)
+
+    connection = session.connection()
+    current_id: int | None = parent_id
     visited: set[int] = set()
-    while current is not None:
-        if current.id == item_id:
-            raise ValidationError("انتخاب این والد باعث ایجاد چرخه در درخت تفصیلی می‌شود.")
-        if current.id in visited:
+    while current_id is not None:
+        row = connection.execute(
+            select(Tafsili.id, Tafsili.parent_id).where(Tafsili.id == current_id)
+        ).one_or_none()
+        if row is None:
+            if current_id == parent_id:
+                raise ValidationError("تفصیلی والد انتخاب‌شده یافت نشد.")
             raise ValidationError("ساختار والد و فرزند تفصیلی معتبر نیست.")
-        visited.add(current.id)
-        current = current.parent
-    return parent
+        if row.id == item_id:
+            raise ValidationError("انتخاب این والد باعث ایجاد چرخه در درخت تفصیلی می‌شود.")
+        if row.id in visited:
+            raise ValidationError("ساختار والد و فرزند تفصیلی معتبر نیست.")
+        visited.add(row.id)
+        current_id = row.parent_id
+    return session.get(Tafsili, parent_id)
 
 
 _PARENT_UNSET = object()
@@ -432,6 +515,12 @@ def update_tafsili(
     user_id: int | None = None,
 ) -> Tafsili:
     auth_service.require(session, user_id, Perm.MASTER_EDIT)
+    parent = None
+    if parent_id is not _PARENT_UNSET:
+        new_parent_id = int(parent_id) if parent_id is not None else None
+        if new_parent_id is not None:
+            _lock_tafsili_tree(session, item.id, new_parent_id)
+        parent = _tafsili_parent(session, new_parent_id, item.id, lock_acquired=True)
     in_use = tafsili_in_use(session, item.id)
     if code is not None:
         code = code.strip()
@@ -448,8 +537,6 @@ def update_tafsili(
             raise InUseError("این تفصیلی سند دارد؛ گروه اصلی آن قابل تغییر نیست.")
         item.group_id = group_id
     if parent_id is not _PARENT_UNSET:
-        new_parent_id = int(parent_id) if parent_id is not None else None
-        parent = _tafsili_parent(session, new_parent_id, item.id)
         item.parent = parent
     if extra_group_ids is not None:
         set_tafsili_groups(session, item, extra_group_ids, user_id)

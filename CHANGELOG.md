@@ -1,5 +1,12 @@
 # PersianLedger changelog
 
+## 0.8.0
+
+- Added hierarchical floating-detail accounts with cycle validation across concurrent database sessions.
+- Matrix drill-down uses the filters from the rendered report, including detail, date, and currency selections.
+- SQLite startup migrations begin a real transaction before DDL and safely recover recognized interrupted mutex migrations.
+- The Windows installer keeps the existing ledger data and applies schema upgrades to that database.
+
 ## 0.7.5
 
 - Database upgrades take a consistent SQLite snapshot, disable foreign keys during table rebuilds, and recover cleanly from an interrupted migration.

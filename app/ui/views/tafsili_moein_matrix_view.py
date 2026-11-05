@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import datetime as _dt
+from dataclasses import dataclass
+
 from PySide6.QtCore import QAbstractTableModel, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -28,6 +31,14 @@ from app.ui.views.report_base import ReportView
 from app.ui.views.statement_view import StatementModel
 from app.ui.widgets.tables import fit_columns
 from app.ui.widgets.tree_picker import TreeChoice, TreePickerDialog
+
+
+@dataclass(frozen=True)
+class _RenderedFilters:
+    tafsili_ids: tuple[int, ...]
+    date_from: _dt.date | None
+    date_to: _dt.date | None
+    currency_ids: tuple[int, ...] | None
 
 
 class MoeinMatrixModel(QAbstractTableModel):
@@ -122,6 +133,7 @@ class TafsiliMoeinMatrixView(ReportView):
         self.add_filter("ارزها", self.make_currency_list())
 
         self.model = MoeinMatrixModel(self)
+        self._rendered_filters: _RenderedFilters | None = None
         self.table = QTableView()
         self.table.setModel(self.model)
         self.table.setAlternatingRowColors(True)
@@ -164,11 +176,6 @@ class TafsiliMoeinMatrixView(ReportView):
             if index >= 0:
                 self.tafsili.setCurrentIndex(index)
 
-    def _dates(self):
-        if not self.from_date.text() and not self.to_date.text():
-            return None, None
-        return self.from_date.gregorian(), self.to_date.gregorian()
-
     def run(self) -> None:
         kwargs = self.ready_filters()
         if kwargs is None:
@@ -179,13 +186,21 @@ class TafsiliMoeinMatrixView(ReportView):
             return
         try:
             with self.ctx.read_session() as db:
-                self._result = tafsili_moein_matrix(
+                result = tafsili_moein_matrix(
                     db,
                     tafsili_id,
                     kwargs.get("date_from"),
                     kwargs.get("date_to"),
                     kwargs.get("currency_ids"),
                 )
+            currency_ids = kwargs.get("currency_ids")
+            self._result = result
+            self._rendered_filters = _RenderedFilters(
+                tafsili_ids=result.tafsili_ids,
+                date_from=kwargs.get("date_from"),
+                date_to=kwargs.get("date_to"),
+                currency_ids=tuple(currency_ids) if currency_ids else None,
+            )
             self.model.set_result(self._result)
             fit_columns(self.table)
             self.summary.setText(f"{len(self._result.rows)} معین")
@@ -193,21 +208,20 @@ class TafsiliMoeinMatrixView(ReportView):
             self.report_error(exc)
 
     def show_statement(self, index) -> None:
-        if not self._result or not index.isValid() or self.tafsili.currentData() is None:
+        snapshot = self._rendered_filters
+        if not self._result or snapshot is None or not index.isValid():
             return
         row = self._result.rows[index.row()]
-        date_from, date_to = self._dates()
         try:
             with self.ctx.read_session() as db:
-                descendant_ids = tafsili_descendant_ids(db, self.tafsili.currentData())
                 result = account_statement(
                     db,
                     StatementFilter(
                         account_id=row.account_id,
-                        tafsili_ids=descendant_ids,
-                        date_from=date_from,
-                        date_to=date_to,
-                        currency_ids=self.checked_currency_ids() or None,
+                        tafsili_ids=list(snapshot.tafsili_ids),
+                        date_from=snapshot.date_from,
+                        date_to=snapshot.date_to,
+                        currency_ids=list(snapshot.currency_ids) if snapshot.currency_ids else None,
                         include_drafts=False,
                         include_opening=True,
                     ),

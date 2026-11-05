@@ -237,6 +237,15 @@ class Tafsili(Base):
         return ids
 
 
+class TafsiliTreeMutex(Base):
+    """Database row used to serialize cross-process edits to the tafsili tree."""
+
+    __tablename__ = "tafsili_tree_mutex"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+
+
 class AccountTafsiliRule(Base):
     """Which tafsili group may be used on which معین, in which slot."""
 

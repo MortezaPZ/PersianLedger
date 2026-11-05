@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 from pathlib import Path
+from queue import Queue
+from threading import Barrier, Thread
 
 from alembic import command
 from alembic.config import Config
@@ -11,11 +13,14 @@ from alembic.runtime.migration import MigrationContext
 import pytest
 from PySide6.QtCore import Qt
 from sqlalchemy import create_engine, select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.db import seed
 from app.db.base import Base
 from app.db.models import Account, AccountTafsiliRule, Currency, Tafsili, TafsiliGroup
-from app.domain.errors import ValidationError
+from app.db.engine import build_engine
+from app.domain.errors import ConcurrencyError, ValidationError
 from app.services import document_service, master_data
 
 
@@ -107,6 +112,107 @@ def test_specific_parent_rule_allows_descendant_leaf(db_session):
     document_service.validate(db_session, _balanced_input(db_session, account, tafsili1_id=leaf.id))
 
 
+def test_tafsili_parent_rejects_self_and_deep_cycles(db_session):
+    seed.seed_base(db_session)
+    group = db_session.execute(select(TafsiliGroup).where(TafsiliGroup.code == "20")).scalar_one()
+    root = master_data.create_tafsili(db_session, code="90101", name="ریشه", group_id=group.id)
+    branch = master_data.create_tafsili(
+        db_session, code="90102", name="شاخه", group_id=group.id, parent_id=root.id
+    )
+    leaf = master_data.create_tafsili(
+        db_session, code="90103", name="برگ", group_id=group.id, parent_id=branch.id
+    )
+
+    with pytest.raises(ValidationError, match="چرخه"):
+        master_data.update_tafsili(db_session, root, parent_id=root.id)
+    with pytest.raises(ValidationError, match="چرخه"):
+        master_data.update_tafsili(db_session, root, parent_id=leaf.id)
+
+    assert root.parent_id is None
+    assert branch.parent_id == root.id
+    assert leaf.parent_id == branch.id
+
+
+def test_tafsili_reparent_rechecks_stale_ancestry_in_independent_sessions(tmp_path):
+    engine = build_engine(f"sqlite:///{(tmp_path / 'stale-tree.sqlite3').as_posix()}")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine, expire_on_commit=False) as setup:
+            group = master_data.create_tafsili_group(setup, code="98", name="ممیزی")
+            node_a = master_data.create_tafsili(setup, code="981", name="A", group_id=group.id)
+            node_b = master_data.create_tafsili(setup, code="982", name="B", group_id=group.id)
+            node_a_id, node_b_id = node_a.id, node_b.id
+            setup.commit()
+
+        with Session(engine, expire_on_commit=False) as first, Session(engine, expire_on_commit=False) as second:
+            first_a = first.get(Tafsili, node_a_id)
+            second_a = second.get(Tafsili, node_a_id)
+            second_b = second.get(Tafsili, node_b_id)
+            master_data.update_tafsili(first, first_a, parent_id=node_b_id)
+            first.commit()
+
+            with pytest.raises(ValidationError, match="چرخه"):
+                master_data.update_tafsili(second, second_b, parent_id=second_a.id)
+            second.rollback()
+
+        with Session(engine) as verify:
+            assert verify.get(Tafsili, node_a_id).parent_id == node_b_id
+            assert verify.get(Tafsili, node_b_id).parent_id is None
+    finally:
+        engine.dispose()
+
+
+def test_competing_reparents_are_serialized_by_database_state(tmp_path):
+    engine = build_engine(f"sqlite:///{(tmp_path / 'racing-tree.sqlite3').as_posix()}")
+    Base.metadata.create_all(engine)
+    try:
+        with Session(engine, expire_on_commit=False) as setup:
+            group = master_data.create_tafsili_group(setup, code="97", name="رقابت")
+            node_a = master_data.create_tafsili(setup, code="971", name="A", group_id=group.id)
+            node_b = master_data.create_tafsili(setup, code="972", name="B", group_id=group.id)
+            node_a_id, node_b_id = node_a.id, node_b.id
+            setup.commit()
+
+        start = Barrier(2)
+        outcomes: Queue[str] = Queue()
+
+        def reparent(target_id: int, parent_id: int) -> None:
+            with Session(engine, expire_on_commit=False) as session:
+                item = session.get(Tafsili, target_id)
+                session.get(Tafsili, parent_id)
+                start.wait(timeout=10)
+                try:
+                    master_data.update_tafsili(session, item, parent_id=parent_id)
+                    session.commit()
+                    outcomes.put("committed")
+                except ValidationError:
+                    session.rollback()
+                    outcomes.put("cycle-rejected")
+                except ConcurrencyError:
+                    session.rollback()
+                    outcomes.put("conflict-rejected")
+
+        workers = [
+            Thread(target=reparent, args=(node_a_id, node_b_id)),
+            Thread(target=reparent, args=(node_b_id, node_a_id)),
+        ]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(timeout=15)
+        assert all(not worker.is_alive() for worker in workers)
+        results = [outcomes.get_nowait(), outcomes.get_nowait()]
+        assert results.count("committed") == 1
+        assert results.count("cycle-rejected") + results.count("conflict-rejected") == 1
+
+        with Session(engine) as verify:
+            final_a = verify.get(Tafsili, node_a_id)
+            final_b = verify.get(Tafsili, node_b_id)
+            assert not (final_a.parent_id == node_b_id and final_b.parent_id == node_a_id)
+    finally:
+        engine.dispose()
+
+
 def test_migration_keeps_existing_tafsilis_as_root_nodes(tmp_path):
     database = tmp_path / "legacy.sqlite3"
     config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
@@ -178,6 +284,275 @@ def test_migration_keeps_existing_tafsilis_as_root_nodes(tmp_path):
             ).one()
         assert "parent_id" not in columns
         assert line_after_downgrade == (1, 125)
+    finally:
+        engine.dispose()
+
+
+def test_tafsili_tree_migration_round_trip_preserves_financial_data(tmp_path):
+    database = tmp_path / "financial-round-trip.sqlite3"
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database.as_posix()}")
+    command.upgrade(config, "moein_code_repeat")
+
+    engine = build_engine(f"sqlite:///{database.as_posix()}")
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO tafsili_groups(id,code,name,is_active) "
+                    "VALUES (1,'20','اشخاص',1),(2,'30','پروژه',1)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO tafsilis(id,code,name,group_id,is_active,row_version) "
+                    "VALUES (1,'1101','شخص اصلی',1,1,1),(2,'1102','زیرمجموعه',1,1,1)"
+                )
+            )
+            connection.execute(text("INSERT INTO tafsili_group_members(tafsili_id,group_id) VALUES (2,2)"))
+            connection.execute(
+                text(
+                    "INSERT INTO currencies(id,code,name,symbol,decimals,sort_order,is_active,is_locked) "
+                    "VALUES (1,'IRR','ریال','ریال',0,1,1,0),(2,'USD','دلار','$',2,2,1,0)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO accounts(id,code,name,level,account_type,nature,is_postable,tafsili1_required,"
+                    "tafsili2_required,is_active,row_version) "
+                    "VALUES (1,'1001','حساب آزمایشی',2,'ASSET','BOTH',1,1,1,1,1)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO account_tafsili_rules(id,account_id,tafsili_group_id,tafsili_id,slot) "
+                    "VALUES (1,1,1,1,1),(2,1,1,2,2)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO fiscal_years(id,title,start_date_g,end_date_g,start_date_j,end_date_j,is_closed) "
+                    "VALUES (1,'1405','2026-03-21','2027-03-20','1405-01-01','1405-12-29',0)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO documents(id,fiscal_year_id,number,doc_type,date_g,date_j,description,status,"
+                    "is_reversed,created_at,row_version) VALUES "
+                    "(1,1,1,'GENERAL','2026-03-21','1405-01-01','سند قطعی','POSTED',0,'2026-03-21 00:00:00',1),"
+                    "(2,1,2,'GENERAL','2026-03-22','1405-01-02','سند پیش‌نویس','DRAFT',0,'2026-03-22 00:00:00',1)"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO document_lines(id,document_id,line_no,account_id,tafsili1_id,tafsili2_id,"
+                    "currency_id,debit,credit) VALUES "
+                    "(1,1,1,1,1,2,1,125,0),(2,2,1,1,2,1,2,0,250)"
+                )
+            )
+
+        def financial_snapshot(connection):
+            queries = (
+                "SELECT id,code,name,symbol,decimals FROM currencies ORDER BY id",
+                "SELECT id,status,number FROM documents ORDER BY id",
+                "SELECT id,document_id,tafsili1_id,tafsili2_id,currency_id,debit,credit "
+                "FROM document_lines ORDER BY id",
+                "SELECT tafsili_id,group_id FROM tafsili_group_members ORDER BY tafsili_id,group_id",
+                "SELECT id,account_id,tafsili_group_id,tafsili_id,slot FROM account_tafsili_rules ORDER BY id",
+            )
+            return tuple(tuple(connection.execute(text(query)).all()) for query in queries)
+
+        with engine.connect() as connection:
+            before = financial_snapshot(connection)
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE tafsilis SET parent_id=1 WHERE id=2"))
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            assert connection.execute(text("SELECT parent_id FROM tafsilis WHERE id=2")).scalar_one() == 1
+
+        command.downgrade(config, "moein_code_repeat")
+        with engine.connect() as connection:
+            assert financial_snapshot(connection) == before
+            columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(tafsilis)")}
+            assert "parent_id" not in columns
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            assert connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tafsili_tree_mutex'"
+            ).scalar_one() == 0
+
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert financial_snapshot(connection) == before
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            assert connection.execute(
+                text("SELECT parent_id FROM tafsilis WHERE id IN (1,2) ORDER BY id")
+            ).all() == [(None,), (None,)]
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == "tafsili_tree_mutex"
+            assert connection.exec_driver_sql(
+                "SELECT id, revision FROM tafsili_tree_mutex"
+            ).all() == [(1, 0)]
+    finally:
+        engine.dispose()
+
+
+def _legacy_migration_database(tmp_path):
+    database = tmp_path / "retained-connection.sqlite3"
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database.as_posix()}")
+    command.upgrade(config, "moein_code_repeat")
+    return config, build_engine(config.get_main_option("sqlalchemy.url"))
+
+
+def test_retained_sqlite_connection_restores_foreign_keys_across_upgrade_downgrade(tmp_path):
+    config, engine = _legacy_migration_database(tmp_path)
+    try:
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            connection.commit()
+            config.attributes["connection"] = connection
+
+            command.upgrade(config, "head")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            connection.rollback()
+
+            with pytest.raises(IntegrityError):
+                connection.exec_driver_sql(
+                    "INSERT INTO tafsili_groups(id,code,name,is_active) VALUES(1,'20','test',1)"
+                )
+                connection.exec_driver_sql(
+                    "INSERT INTO tafsilis(id,code,name,parent_id,group_id,is_active,row_version) "
+                    "VALUES(1,'test','test',999,1,1,1)"
+                )
+            connection.rollback()
+
+            command.downgrade(config, "moein_code_repeat")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            connection.rollback()
+            command.upgrade(config, "head")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+    finally:
+        engine.dispose()
+
+
+def test_sqlite_migration_failure_restores_foreign_keys_on_retained_connection(tmp_path, monkeypatch):
+    config, engine = _legacy_migration_database(tmp_path)
+    try:
+        with engine.connect() as connection:
+            connection.commit()
+            config.attributes["connection"] = connection
+            original_run_migrations = MigrationContext.run_migrations
+
+            def fail_migration(self, *args, **kwargs):
+                original_run_migrations(self, *args, **kwargs)
+                raise RuntimeError("injected migration failure")
+
+            monkeypatch.setattr(MigrationContext, "run_migrations", fail_migration)
+            with pytest.raises(RuntimeError, match="injected migration failure"):
+                command.upgrade(config, "head")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            connection.rollback()
+            columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(tafsilis)")}
+            assert "parent_id" not in columns
+            tables = {
+                row[0]
+                for row in connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            assert "tafsili_tree_mutex" not in tables
+            assert (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+                == "moein_code_repeat"
+            )
+    finally:
+        engine.dispose()
+
+
+def test_sqlite_migration_respects_active_callers_transaction(tmp_path):
+    database = tmp_path / "caller-transaction.sqlite3"
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    url = f"sqlite:///{database.as_posix()}"
+    config.set_main_option("sqlalchemy.url", url)
+    command.upgrade(config, "tafsili_link")
+    engine = build_engine(url)
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO app_settings(key,value) VALUES ('caller_transaction','pending')"
+            )
+            assert connection.in_transaction()
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            config.attributes["connection"] = connection
+            command.upgrade(config, "moein_code_repeat")
+            assert connection.in_transaction()
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            connection.rollback()
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+                == "tafsili_link"
+            )
+            assert connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM app_settings WHERE key='caller_transaction'"
+            ).scalar_one() == 0
+    finally:
+        engine.dispose()
+
+
+def test_sqlite_tree_migration_refuses_active_foreign_key_transaction_without_changes(tmp_path):
+    config, engine = _legacy_migration_database(tmp_path)
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql("SELECT 1")
+            assert connection.in_transaction()
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            config.attributes["connection"] = connection
+
+            with pytest.raises(RuntimeError, match="no migration was run"):
+                command.upgrade(config, "head")
+
+            assert connection.in_transaction()
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+                == "moein_code_repeat"
+            )
+            columns = {row[1] for row in connection.exec_driver_sql("PRAGMA table_info(tafsilis)")}
+            assert "parent_id" not in columns
+            assert "tafsili_tree_mutex" not in {
+                row[0]
+                for row in connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            connection.rollback()
+
+            command.upgrade(config, "head")
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            connection.rollback()
+            connection.exec_driver_sql("SELECT 1")
+            assert connection.in_transaction()
+
+            with pytest.raises(RuntimeError, match="no migration was run"):
+                command.downgrade(config, "moein_code_repeat")
+
+            assert connection.in_transaction()
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
+            assert (
+                connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one()
+                == "tafsili_tree_mutex"
+            )
+            assert "parent_id" in {
+                row[1] for row in connection.exec_driver_sql("PRAGMA table_info(tafsilis)")
+            }
+            assert connection.exec_driver_sql("PRAGMA foreign_key_check").all() == []
+            connection.rollback()
     finally:
         engine.dispose()
 

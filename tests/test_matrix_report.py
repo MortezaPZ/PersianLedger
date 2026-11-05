@@ -64,6 +64,7 @@ def test_matrix_rolls_up_descendants_by_moein_and_keeps_currencies_separate(db_s
     _post_line(db_session, year=year, number=7007, date=from_date, account=bank, tafsili=leaf_b, currency=usd, credit=5)
 
     result = tafsili_moein_matrix(db_session, root.id, from_date, to_date, None)
+    assert set(result.tafsili_ids) == {root.id, branch.id, leaf_a.id, leaf_b.id}
     rows = {row.account_id: row for row in result.rows}
     cash_irr = rows[cash.id].amounts[irr.id]
     bank_usd = rows[bank.id].amounts[usd.id]
