@@ -1,4 +1,4 @@
 APP_ID = "PersianLedger"
 APP_NAME_FA = "دفتر مالی چندارزی"
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.8.1"
 APP_PUBLISHER = "PersianLedger"

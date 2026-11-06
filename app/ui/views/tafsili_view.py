@@ -7,16 +7,21 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QInputDialog,
+    QWidget,
 )
 
 from app.domain.errors import LedgerError
@@ -219,45 +224,6 @@ class TafsiliDialog(QDialog):
             QMessageBox.warning(self, APP_NAME_FA, str(exc))
 
 
-class _TreeTableCompatibility:
-    """Keep simple row/item inspection helpers while the visible list is hierarchical."""
-
-    def __init__(self, tree: QTreeWidget) -> None:
-        self.tree = tree
-
-    def _items(self) -> list[QTreeWidgetItem]:
-        out: list[QTreeWidgetItem] = []
-
-        def visit(node: QTreeWidgetItem) -> None:
-            out.append(node)
-            for index in range(node.childCount()):
-                visit(node.child(index))
-
-        for index in range(self.tree.topLevelItemCount()):
-            visit(self.tree.topLevelItem(index))
-        return out
-
-    def rowCount(self) -> int:
-        return len(self._items())
-
-    def item(self, row: int, _column: int) -> _TreeTableCell:
-        return _TreeTableCell(self._items()[row], _column)
-
-    def selectRow(self, row: int) -> None:
-        item = self._items()[row]
-        self.tree.setCurrentItem(item)
-        item.setSelected(True)
-
-
-class _TreeTableCell:
-    def __init__(self, item: QTreeWidgetItem, column: int) -> None:
-        self.item = item
-        self.column = column
-
-    def text(self) -> str:
-        return self.item.text(self.column)
-
-
 class TafsiliView(BaseView):
     title = "تفصیلی شناور"
     hint = "تفصیلی‌ها را در درخت والد و فرزند مدیریت کنید. گروه‌ها دسته‌بندی مستقل‌اند؛ در سند همچنان دو خانهٔ تفصیلی ۱ و ۲ وجود دارد."
@@ -291,14 +257,57 @@ class TafsiliView(BaseView):
         bar.addWidget(add_group)
         bar.addWidget(add)
         self.body.addLayout(bar)
+
+        # Match the reference workflow: browse groups and their nested details
+        # in a tree at the left, and inspect the selected branch in a table.
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setLayoutDirection(Qt.LeftToRight)
         self.tree = QTreeWidget()
-        self.tree.setColumnCount(6)
-        self.tree.setHeaderLabels(["کد", "نام", "گروه اصلی", "گروه‌های دیگر", "معین‌های متصل", "وضعیت"])
+        self.tree.setHeaderHidden(True)
+        self.tree.setColumnCount(1)
+        self.tree.setIndentation(18)
+        self.tree.setMinimumWidth(220)
+        self.tree.setLayoutDirection(Qt.RightToLeft)
+        self.tree.setToolTip("گروه‌ها و تفصیلی‌های والد و فرزند را برای مرور انتخاب کنید.")
+
+        listing = QWidget()
+        listing_layout = QVBoxLayout(listing)
+        listing_layout.setContentsMargins(0, 0, 0, 0)
+        listing_layout.setSpacing(8)
+        self.selection_title = QLabel("همهٔ تفصیلی‌ها")
+        self.selection_title.setObjectName("PageTitle")
+        listing_layout.addWidget(self.selection_title)
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["کد", "نام", "گروه اصلی", "گروه‌های دیگر", "معین‌های متصل", "وضعیت"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        self.table.setLayoutDirection(Qt.RightToLeft)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(False)
+        for column, width in enumerate((76, 146, 104, 126, 176, 68)):
+            self.table.setColumnWidth(column, width)
+        listing_layout.addWidget(self.table, 1)
+
+        self.splitter.addWidget(self.tree)
+        self.splitter.addWidget(listing)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setSizes([270, 730])
+        self.body.addWidget(self.splitter, 1)
         self.tree.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tree.doubleClicked.connect(self.edit)
-        self.body.addWidget(self.tree)
-        self.table = _TreeTableCompatibility(self.tree)
+        self.tree.currentItemChanged.connect(self._tree_selection_changed)
+        self.table.itemSelectionChanged.connect(self._table_selection_changed)
+        self.table.cellDoubleClicked.connect(lambda *_: self.edit())
+        self._reloading = False
+        self._syncing_selection = False
+        self._rows_by_id = {}
+        self._tree_items_by_id = {}
+        self._meoin_tooltips = {}
         self.filter.currentIndexChanged.connect(self.reload)
         self.reload()
 
@@ -317,6 +326,7 @@ class TafsiliView(BaseView):
     def reload(self) -> None:
         gid = self.filter.currentData()
         groups = {g.id: g for g in self.ctx.refdata.groups}
+        self._meoin_tooltips = {}
         with self.ctx.read_session() as db:
             rows = master_data.tafsilis(db)
             visible = {
@@ -324,9 +334,11 @@ class TafsiliView(BaseView):
             }
             if gid is not None:
                 for item in list(visible.values()):
+                    seen_parent_ids = {item.id}
                     parent = item.parent
-                    while parent is not None:
+                    while parent is not None and parent.id not in seen_parent_ids:
                         visible.setdefault(parent.id, parent)
+                        seen_parent_ids.add(parent.id)
                         parent = parent.parent
             payload = []
             for item in rows:
@@ -335,34 +347,170 @@ class TafsiliView(BaseView):
                 extras = [groups[i].name for i in item.group_ids if i != item.group_id and i in groups]
                 home = groups[item.group_id].name if item.group_id in groups else ""
                 meoin = self.ctx.refdata.moein_accounts_for_groups(item.group_ids)
-                meoin_names = "، ".join(sorted({a.code for a in meoin if a.is_postable}))
+                linked_codes = sorted({a.code for a in meoin if a.is_postable})
+                self._meoin_tooltips[item.id] = "، ".join(linked_codes)
+                meoin_names = "، ".join(linked_codes[:3])
+                if len(linked_codes) > 3:
+                    meoin_names += f" و {len(linked_codes) - 3} مورد دیگر"
                 payload.append(
                     (
                         item,
                         [item.code, item.name, home, "، ".join(extras), meoin_names, "فعال" if item.is_active else "غیرفعال"],
                     )
                 )
+
+        self._rows_by_id = {item.id: (item, values) for item, values in payload}
+        self._tree_items_by_id = {}
+        self._reloading = True
         self.tree.clear()
-        nodes: dict[int, QTreeWidgetItem] = {}
-        parent_ids: dict[int, int | None] = {}
-        for item, values in payload:
-            node = QTreeWidgetItem(values)
-            node.setData(0, Qt.UserRole, item.id)
-            nodes[item.id] = node
-            parent_ids[item.id] = item.parent_id if item.parent_id in visible else None
-        for ident, node in nodes.items():
-            parent_id = parent_ids[ident]
-            if parent_id in nodes:
-                nodes[parent_id].addChild(node)
-            else:
-                self.tree.addTopLevelItem(node)
-        self.tree.expandAll()
-        for column in range(self.tree.columnCount()):
-            self.tree.resizeColumnToContents(column)
+        root = QTreeWidgetItem(["تفصیلی‌ها"])
+        root.setData(0, Qt.UserRole, ("root", None))
+        root.setToolTip(0, "همهٔ گروه‌ها و تفصیلی‌ها")
+        self.tree.addTopLevelItem(root)
+
+        payload_by_id = {item.id: (item, values) for item, values in payload}
+        for group in sorted(groups.values(), key=lambda row: (row.code, row.name)):
+            if gid is not None and group.id != gid:
+                continue
+            group_node = QTreeWidgetItem([f"{group.code} {group.name}"])
+            group_node.setData(0, Qt.UserRole, ("group", group.id))
+            group_node.setToolTip(0, f"گروه تفصیلی: {group.name}")
+            root.addChild(group_node)
+
+            # A detail can belong to multiple reporting groups. It appears in
+            # each applicable branch, while its stored parent-child relation
+            # remains unchanged. Ancestors are included to keep paths legible.
+            group_visible = {
+                ident for ident, (item, _values) in payload_by_id.items() if group.id in item.group_ids
+            }
+            pending = list(group_visible)
+            while pending:
+                current_id = pending.pop()
+                current = payload_by_id.get(current_id)
+                if current is None:
+                    continue
+                parent_id = current[0].parent_id
+                if parent_id in payload_by_id and parent_id not in group_visible:
+                    group_visible.add(parent_id)
+                    pending.append(parent_id)
+
+            nodes: dict[int, QTreeWidgetItem] = {}
+            for ident in sorted(group_visible, key=lambda value: payload_by_id[value][0].code):
+                item, _values = payload_by_id[ident]
+                node = QTreeWidgetItem([item.display])
+                node.setData(0, Qt.UserRole, item.id)
+                node.setToolTip(0, f"تفصیلی {item.code} — {item.name}")
+                nodes[ident] = node
+                self._tree_items_by_id.setdefault(ident, []).append(node)
+            for ident, node in nodes.items():
+                parent_id = payload_by_id[ident][0].parent_id
+                if parent_id in nodes:
+                    nodes[parent_id].addChild(node)
+                else:
+                    group_node.addChild(node)
+
+        root.setExpanded(True)
+        for index in range(root.childCount()):
+            root.child(index).setExpanded(gid is not None)
+        self._reloading = False
+
+        target = root
+        if gid is not None:
+            for index in range(root.childCount()):
+                if root.child(index).data(0, Qt.UserRole) == ("group", gid):
+                    target = root.child(index)
+                    break
+        self.tree.setCurrentItem(target)
+        self._render_table_for_item(target)
 
     def _current_id(self) -> int | None:
+        row = self.table.currentRow()
+        if row >= 0 and self.table.item(row, 0) is not None:
+            ident = self.table.item(row, 0).data(Qt.UserRole)
+            if isinstance(ident, int):
+                return ident
         node = self.tree.currentItem()
-        return node.data(0, Qt.UserRole) if node else None
+        data = node.data(0, Qt.UserRole) if node else None
+        return data if isinstance(data, int) else None
+
+    def _tree_selection_changed(self, current, _previous) -> None:
+        if self._reloading or self._syncing_selection or current is None:
+            return
+        data = current.data(0, Qt.UserRole)
+        if isinstance(data, tuple) and data[0] in {"root", "group"}:
+            wanted = data[1] if data[0] == "group" else None
+            if self.filter.currentData() != wanted:
+                index = self.filter.findData(wanted)
+                if index >= 0:
+                    self.filter.blockSignals(True)
+                    self.filter.setCurrentIndex(index)
+                    self.filter.blockSignals(False)
+                    self.reload()
+                    return
+        self._render_table_for_item(current)
+
+    def _render_table_for_item(self, node: QTreeWidgetItem) -> None:
+        data = node.data(0, Qt.UserRole)
+        selected: list[tuple[object, list[str]]]
+        if isinstance(data, int):
+            include = {data}
+            children_by_parent: dict[int, list[int]] = {}
+            for ident, (item, _values) in self._rows_by_id.items():
+                if item.parent_id is not None:
+                    children_by_parent.setdefault(item.parent_id, []).append(ident)
+            pending = [data]
+            while pending:
+                current_id = pending.pop()
+                for child_id in children_by_parent.get(current_id, []):
+                    if child_id not in include:
+                        include.add(child_id)
+                        pending.append(child_id)
+            selected = [self._rows_by_id[ident] for ident in include if ident in self._rows_by_id]
+            entry = self._rows_by_id.get(data)
+            title = entry[0].display if entry else "تفصیلی"
+        elif isinstance(data, tuple) and data[0] == "group":
+            group_id = data[1]
+            selected = [
+                entry for entry in self._rows_by_id.values() if group_id in entry[0].group_ids
+            ]
+            group = next((g for g in self.ctx.refdata.groups if g.id == group_id), None)
+            title = f"{group.code} {group.name}" if group else "گروه تفصیلی"
+        else:
+            selected = list(self._rows_by_id.values())
+            title = "همهٔ تفصیلی‌ها" if self.filter.currentData() is None else "تفصیلی‌های گروه"
+
+        selected.sort(key=lambda entry: (entry[0].code, entry[0].name))
+        self._syncing_selection = True
+        self.table.blockSignals(True)
+        self.table.clearSelection()
+        self.table.setCurrentCell(-1, -1)
+        self.table.setRowCount(len(selected))
+        for row, (item, values) in enumerate(selected):
+            for column, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                cell.setData(Qt.UserRole, item.id)
+                if column == 4:
+                    cell.setToolTip(self._meoin_tooltips.get(item.id, value))
+                self.table.setItem(row, column, cell)
+        self.table.blockSignals(False)
+        self._syncing_selection = False
+        self.selection_title.setText(f"{title}  ·  {len(selected)} مورد")
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(30)
+        self.table.setShowGrid(False)
+
+    def _table_selection_changed(self) -> None:
+        if self._syncing_selection:
+            return
+        row = self.table.currentRow()
+        if row < 0 or self.table.item(row, 0) is None:
+            return
+        ident = self.table.item(row, 0).data(Qt.UserRole)
+        candidates = self._tree_items_by_id.get(ident, [])
+        if candidates:
+            self._syncing_selection = True
+            self.tree.setCurrentItem(candidates[0])
+            self._syncing_selection = False
 
     def create(self) -> None:
         if TafsiliDialog(self.ctx, self).exec():

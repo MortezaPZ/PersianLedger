@@ -1,5 +1,10 @@
 # PersianLedger changelog
 
+## 0.8.1
+
+- Updated the floating-detail screen to match the requested workflow: browse detail groups and parent-child details in a tree, then review the selected branch in a separate information table.
+- Selecting a group, parent, or detail shows its applicable details and descendants while preserving group memberships and linked subsidiary accounts.
+
 ## 0.8.0
 
 - Added hierarchical floating-detail accounts with cycle validation across concurrent database sessions.
