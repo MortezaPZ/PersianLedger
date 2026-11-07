@@ -1,0 +1,18 @@
+{
+  "version": "0.8.4",
+  "capture": "scripts/capture_ui.py",
+  "data": "Isolated temporary demo database; no project or customer database used",
+  "reviewedScreenshots": [
+    "light-home.png",
+    "dark-home.png",
+    "light-entry.png",
+    "dark-entry.png",
+    "light-trial.png",
+    "dark-trial.png"
+  ],
+  "designReferences": [
+    "https://learn.microsoft.com/en-us/windows/apps/design/controls/navigationview",
+    "https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines",
+    "https://doc.qt.io/qt-6.12/qtwidgets-styling-approaches.html"
+  ]
+}

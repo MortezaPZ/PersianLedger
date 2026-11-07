@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -25,6 +26,7 @@ from app.ui.views.audit_view import AuditView
 from app.ui.views.browse_view import BrowseView
 from app.ui.views.document_entry_view import DocumentEntryView
 from app.ui.views.document_list_view import DocumentListView
+from app.ui.views.dashboard_view import DashboardView
 from app.ui.views.journal_view import JournalView
 from app.ui.views.ledger_view import LedgerView
 from app.ui.views.income_statement_view import IncomeStatementView
@@ -71,7 +73,9 @@ SECTIONS = (
     ),
 )
 
-PAGES = tuple((key, title, shortcut, cls) for _section, pages in SECTIONS for key, title, shortcut, cls in pages)
+HOME_PAGE = ("home", "میزکار", "Ctrl+Shift+H", DashboardView)
+PAGES = tuple((key, title, shortcut, cls) for _section, pages in SECTIONS for key, title, shortcut, cls in pages) + (HOME_PAGE,)
+NAV_SECTIONS = (("میزکار", (HOME_PAGE,)),) + SECTIONS
 
 
 def clamp_to_screen(window: QMainWindow) -> None:
@@ -99,6 +103,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self.stack = QStackedWidget()
+        self.page_index = {key: index for index, (key, *_rest) in enumerate(PAGES)}
         self.views = []
         for _key, _title, _shortcut, cls in PAGES:
             view = cls(ctx)
@@ -110,7 +115,7 @@ class MainWindow(QMainWindow):
         self._build_status_bar()
         self._restore_geometry()
         clamp_to_screen(self)
-        self.go_to(0)
+        self.go_to(self.page_index["home"])
 
     def _build_nav(self) -> QWidget:
         pal = theme.current_palette()
@@ -145,16 +150,29 @@ class MainWindow(QMainWindow):
         head.addWidget(mark, 0, Qt.AlignVCenter)
         outer.addWidget(header)
 
+        self.nav_search = QLineEdit()
+        self.nav_search.setObjectName("NavSearch")
+        self.nav_search.setPlaceholderText("جست‌وجوی بخش‌ها…")
+        self.nav_search.setClearButtonEnabled(True)
+        self.nav_search.setAccessibleName("جست‌وجو در بخش‌های برنامه")
+        self.nav_search.setToolTip("نام بخش را بنویسید تا در منو پیدا شود. میان‌بر: Ctrl+K")
+        self.nav_search.setContentsMargins(12, 0, 12, 0)
+        self.nav_search.textChanged.connect(self._filter_navigation)
+        outer.addWidget(self.nav_search)
+        QShortcut(QKeySequence("Ctrl+K"), self, activated=self.nav_search.setFocus)
+
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         inner = QWidget(); inner.setObjectName("NavInner")
         col = QVBoxLayout(inner); col.setContentsMargins(0, 4, 0, 12); col.setSpacing(0)
         self.buttons = QButtonGroup(self); self.buttons.setExclusive(True)
         self._nav_buttons: list[tuple[QPushButton, str]] = []
-        index = 0
-        for section, pages in SECTIONS:
+        self._nav_groups: list[tuple[QLabel, list[QPushButton]]] = []
+        for section, pages in NAV_SECTIONS:
             label = QLabel(section); label.setObjectName("NavSection"); col.addWidget(label)
+            section_buttons = []
             for key, title_text, shortcut, _cls in pages:
+                index = self.page_index[key]
                 btn = QPushButton(title_text)
                 btn.setIcon(icons.page_icon(key, pal.ink_text))
                 btn.setIconSize(QSize(18, 18))
@@ -166,11 +184,22 @@ class MainWindow(QMainWindow):
                 QShortcut(QKeySequence(shortcut), self, activated=lambda i=index: self.go_to(i))
                 col.addWidget(btn)
                 self._nav_buttons.append((btn, key))
-                index += 1
+                section_buttons.append(btn)
+            self._nav_groups.append((label, section_buttons))
         col.addStretch()
         scroll.setWidget(inner)
         outer.addWidget(scroll, 1)
         return panel
+
+    def _filter_navigation(self, text: str) -> None:
+        needle = text.strip().casefold()
+        for section_label, buttons in self._nav_groups:
+            any_visible = False
+            for button in buttons:
+                visible = not needle or needle in button.text().casefold()
+                button.setVisible(visible)
+                any_visible = any_visible or visible
+            section_label.setVisible(any_visible)
 
     def restyle_nav(self) -> None:
         """Re-tint the nav icons after a theme change (active one stays white)."""
@@ -179,15 +208,29 @@ class MainWindow(QMainWindow):
         for btn, key in getattr(self, "_nav_buttons", ()):
             colour = pal.text_on_brand if btn.isChecked() else pal.ink_text
             btn.setIcon(icons.page_icon(key, colour))
+        dashboard = self.views[self.page_index["home"]]
+        dashboard.restyle()
 
     def _wire(self) -> None:
-        entry: DocumentEntryView = self.views[0]
-        listing: DocumentListView = self.views[1]
-        listing.open_requested = lambda doc_id: (entry.load_document(doc_id), self.go_to(0))
+        listing: DocumentListView = self.views[self.page_index["list"]]
+        listing.open_requested = self._open_document
+        dashboard: DashboardView = self.views[self.page_index["home"]]
+        dashboard.navigate_requested = self._navigate_key
+        dashboard.open_document_requested = self._open_document
         for view in self.views:
             if isinstance(view, SettingsView):
                 view.after_restore = self._after_restore
         self.ctx.dataChanged.connect(self._refresh_status)
+
+    def _navigate_key(self, key: str) -> None:
+        index = self.page_index.get(key)
+        if index is not None:
+            self.go_to(index)
+
+    def _open_document(self, document_id: int) -> None:
+        entry: DocumentEntryView = self.views[self.page_index["entry"]]
+        entry.load_document(document_id)
+        self.go_to(self.page_index["entry"])
 
     def _after_restore(self) -> None:
         for view in self.views:

@@ -1,0 +1,39 @@
+{
+  "version": "0.8.4",
+  "branch": "hierarchical-tafsili-matrix",
+  "baseTag": "v0.8.3",
+  "features": [
+    "Added the fiscal-year dashboard as the startup page.",
+    "Added document, posted, draft, and active-tafsili counts plus the six latest documents.",
+    "Added double-click navigation from recent documents and quick links for common tasks.",
+    "Added searchable sidebar navigation with Ctrl+K while preserving existing page shortcuts.",
+    "Kept financial summaries as counts; no cross-currency amount aggregation was introduced."
+  ],
+  "installer": {
+    "path": "C:\\Users\\Moteza\\Desktop\\PersianLedger-Setup-0.8.4.exe",
+    "sizeBytes": 57106030,
+    "sha256": "389EEB2C6159DD43F07DA1E7CD0508693AB88631BADB069C15CBC35F7F7CB04F",
+    "productVersion": "0.8.4",
+    "installerBuild": "PyInstaller + Inno Setup 6.7.3",
+    "databasePayload": "No database is included in the installer. Existing installed database behavior is unchanged and data is preserved on update."
+  },
+  "verification": {
+    "pytest": "181 passed, 41 skipped, 0 failed; exit code 0",
+    "compileall": "app tests scripts packaging; exit code 0",
+    "pipCheck": "No broken requirements; exit code 0",
+    "diffCheck": "Passed; exit code 0",
+    "packagedStartup": "Frozen executable remained alive for 12 seconds in isolated temporary build folder; then stopped by smoke procedure; exit code 0",
+    "livePostgreSQL": "Not run: PL_TEST_PG_URL is not set; PostgreSQL-related tests were skipped",
+    "lintAndType": "ruff and pyright are not installed in the project virtual environment",
+    "coverage": "Not measured"
+  },
+  "userDataReset": "Not performed: environment policy blocked deletion. Existing user databases were left untouched.",
+  "uiEvidence": [
+    "ui/light-home.png",
+    "ui/dark-home.png",
+    "ui/light-entry.png",
+    "ui/dark-entry.png",
+    "ui/light-trial.png",
+    "ui/dark-trial.png"
+  ]
+}

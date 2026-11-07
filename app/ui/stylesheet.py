@@ -58,6 +58,16 @@ QToolTip {{
     font-size: 11px;
     background: transparent;
 }}
+#NavSearch {{
+    margin: 10px 12px 6px;
+    background: {ink_alt};
+    color: #ffffff;
+    border: 1px solid {ink_line};
+    border-radius: 7px;
+    padding: 7px 10px;
+    min-height: 20px;
+}}
+#NavSearch:focus {{ border: 1px solid {focus}; }}
 /* No letter-spacing here: Persian script is cursive and spacing breaks the
    joins between letters. */
 #NavSection {{
@@ -124,6 +134,59 @@ QToolTip {{
     background: {surface};
     border: 1px solid {line};
     border-radius: 9px;
+}}
+#DashboardHero {{
+    background: {ink};
+    border: 1px solid {ink_line};
+    border-radius: 14px;
+}}
+#HeroTitle {{
+    color: #ffffff;
+    font-size: 21px;
+    font-weight: bold;
+    background: transparent;
+}}
+#HeroHint {{
+    color: {ink_text};
+    font-size: 12px;
+    background: transparent;
+}}
+#MetricCard {{
+    background: {surface};
+    border: 1px solid {line};
+    border-radius: 11px;
+}}
+#MetricAccent {{ background: {brand}; border: none; border-radius: 2px; }}
+#MetricValue {{ color: {text}; font-size: 23px; font-weight: bold; background: transparent; }}
+#MetricCaption {{ color: {text_muted}; font-size: 11px; background: transparent; }}
+#MetricIcon {{
+    background: {brand_soft};
+    border: 1px solid {line};
+    border-radius: 8px;
+    padding: 8px;
+}}
+#DashboardHero QPushButton[kind="hero"] {{
+    color: #ffffff;
+    background: {brand};
+    border: 1px solid {brand_hover};
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: bold;
+}}
+#DashboardHero QPushButton[kind="hero"]:hover {{ background: {brand_hover}; }}
+#DashboardHero QPushButton[kind="hero"]:focus {{ border: 2px solid {focus}; }}
+QPushButton[kind="dashboard-link"] {{
+    color: {text};
+    background: {surface_alt};
+    border: 1px solid {line};
+    border-radius: 7px;
+    padding: 9px 12px;
+    text-align: right;
+}}
+QPushButton[kind="dashboard-link"]:hover {{
+    color: {brand};
+    background: {brand_soft};
+    border-color: {brand};
 }}
 /* Plain containers must not paint the canvas colour over a card they sit on. */
 #FilterField {{ background: transparent; }}

@@ -68,6 +68,7 @@ This version:
 3. The tafsili link attaches the tafsili itself and does not show it in the chart.
 4. Choosing a tafsili does not change or lock the ledger account.
 5. Home-office import is only for the admin, and only on the server.
+6. The dashboard shows fiscal-year document counts and recent documents; Ctrl+K searches the navigation menu.
 Details are in docs\\user-guide.md.
 
 
@@ -102,6 +103,7 @@ PERSIAN_README = """دفتر مالی چندارزی — نسخه {version}
 ۳. درخت حساب‌ها شامل گروه حساب، کل و معین است؛ تفصیلی‌ها در آن شاخه نیستند.
 ۴. پیش از حذف سرفصل یا تفصیلی، برنامه استفاده‌نشدن آن را بررسی می‌کند.
 ۵. سند بدهکار/بستانکار پس از بستن و بازکردن دوباره برنامه حفظ می‌شود.
+۶. میزکار، خلاصهٔ سال مالی و اسناد اخیر را نشان می‌دهد؛ با Ctrl+K در منو جست‌وجو کنید.
 """
 
 

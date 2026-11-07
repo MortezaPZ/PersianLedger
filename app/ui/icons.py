@@ -126,6 +126,12 @@ def _calendar(path: QPainterPath) -> None:
         path.addEllipse(QPointF(x, 17), 0.9, 0.9)
 
 
+def _home(path: QPainterPath) -> None:
+    _polyline(path, [(3.5, 11), (12, 4), (20.5, 11)])
+    _polyline(path, [(6.5, 9.5), (6.5, 20), (17.5, 20), (17.5, 9.5)])
+    _polyline(path, [(10, 20), (10, 14), (14, 14), (14, 20)])
+
+
 def _plus(path: QPainterPath) -> None:
     _polyline(path, [(12, 5.5), (12, 18.5)])
     _polyline(path, [(5.5, 12), (18.5, 12)])
@@ -152,6 +158,7 @@ def _check(path: QPainterPath) -> None:
 
 _SHAPES = {
     "calendar": _calendar,
+    "home": _home,
     "plus": _plus,
     "document": _document,
     "list": _list,
@@ -172,6 +179,7 @@ _SHAPES = {
 }
 
 PAGE_ICONS = {
+    "home": "home",
     "entry": "document",
     "list": "list",
     "browse": "folder",
