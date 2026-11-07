@@ -26,6 +26,9 @@ from app.ui.widgets.jalali_date_edit import JalaliDateEdit
 class ReportView(BaseView):
     """Filter card, run/export/print actions and a summary line."""
 
+    # On short displays the filter panel and result grid need a shared vertical
+    # scroll path instead of letting the report rows disappear below the window.
+    scrollable = True
     file_stem = "گزارش"
 
     def __init__(self, context, parent=None) -> None:
@@ -127,7 +130,7 @@ class ReportView(BaseView):
         layout.setSpacing(4)
         listing = QListWidget()
         listing.setSelectionMode(QAbstractItemView.NoSelection)
-        listing.setFixedHeight(104)  # three rows plus padding, so nothing clips
+        listing.setFixedHeight(96)  # three rows plus padding, with a scroll bar for longer lists
         listing.setMinimumWidth(150)
         hint = QLabel(hint_text)
         hint.setObjectName("Hint")  # themed, so it stays legible in dark mode

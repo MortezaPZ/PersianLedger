@@ -1,0 +1,65 @@
+{
+  "contract": "Visual refresh of the Persian RTL accounting desktop app. Preserve accounting workflows, two-theme support, dense report tables, keyboard operation, and the existing Qt widget architecture.",
+  "targetViewports": ["1440x900", "1280x800", "1024x768"],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "Keyboard-check.log records that the document description and fiscal-year labels focus their controls and Tab moves focus between navigation items. The entry table accepted focus and shows a visible focus border in light-1440x900-entry-focus.png. Visible labels remain beside inputs; the attachment list has an accessible name. This is a focused UI check, not a full assistive-technology audit."
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "Rendered and inspected the entry form and account browse at 1440x900, 1280x800, and 1024x768. At 1024x768 the report uses vertical scrolling so results remain reachable; fewer table rows fit without scrolling."
+  },
+  "contentStates": {
+    "loading": {
+      "status": "not-applicable",
+      "reason": "The reviewed local desktop pages run synchronous queries and do not expose a progressive loading state."
+    },
+    "empty": {
+      "status": "pass",
+      "evidence": "light-1440x900-entry.png shows the empty attachment state with the next action, while the attachment list remains empty."
+    },
+    "error": {
+      "status": "pass",
+      "evidence": "error-1440x900-invalid-date.png captures the existing Persian invalid-date validation message."
+    },
+    "partial": {
+      "status": "pass",
+      "evidence": "light-1440x900-browse-filtered.png shows a report filtered to one selected currency while retaining its filter context."
+    },
+    "success": {
+      "status": "pass",
+      "evidence": "light-1440x900-browse-success.png shows populated account rows and balances."
+    },
+    "permission": {
+      "status": "pass",
+      "evidence": "permission-viewer-1440x900-entry.png was captured with a viewer role; the save/post actions were disabled and the posting control carried the permission hint."
+    }
+  },
+  "renderedEvidence": [
+    {
+      "viewport": "1440x900",
+      "artifact": "light-1440x900-entry-focus.png",
+      "observation": "Primary action hierarchy is clear, the focused document grid has a visible outline, and the empty attachment guidance is readable."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "dark-1440x900-browse.png",
+      "observation": "Dark theme preserves readable report headers, filters, currency checkboxes, and row contrast."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "light-1440x900-browse-success.png",
+      "observation": "The report result table shows multiple rows with clear header and row separation."
+    },
+    {
+      "viewport": "1280x800",
+      "artifact": "compact-1280x800-browse.png",
+      "observation": "The result table remains visible below the filters; additional rows are available through the page scroll."
+    },
+    {
+      "viewport": "1024x768",
+      "artifact": "small-1024x768-browse.png",
+      "observation": "The compact layout retains filters and a reachable result table with vertical scrolling."
+    }
+  ]
+}

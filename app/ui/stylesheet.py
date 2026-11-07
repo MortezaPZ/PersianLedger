@@ -36,6 +36,17 @@ QToolTip {{
     background: {ink};
     border-bottom: 1px solid {ink_line};
 }}
+#NavMark {{
+    background: {brand};
+    border: 1px solid {ink_line};
+    border-radius: 10px;
+}}
+#NavMarkText {{
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: bold;
+    background: transparent;
+}}
 #NavTitle {{
     color: #ffffff;
     font-size: 15px;
@@ -61,6 +72,7 @@ QToolTip {{
     color: {ink_text};
     border: none;
     border-right: 3px solid transparent;
+    border-left: 3px solid transparent;
     padding: 10px 18px;
     margin: 1px 8px 1px 8px;
     text-align: right;
@@ -78,6 +90,15 @@ QToolTip {{
     border-right: 3px solid {accent};
     font-weight: bold;
 }}
+#NavPanel QPushButton:focus, #NavInner QPushButton:focus {{
+    border-right: 3px solid {focus};
+    border-left: 3px solid {focus};
+    background: {ink_alt};
+}}
+#NavPanel QPushButton:checked:focus, #NavInner QPushButton:checked:focus {{
+    border-right: 3px solid {accent};
+    border-left: 3px solid {focus};
+}}
 #NavPanel QScrollBar:vertical {{ background: {ink}; width: 8px; }}
 #NavPanel QScrollBar::handle:vertical {{ background: {ink_line}; border-radius: 4px; }}
 
@@ -85,7 +106,8 @@ QToolTip {{
 #PageHeader {{
     background: {surface};
     border: 1px solid {line};
-    border-radius: 10px;
+    border-right: 3px solid {brand};
+    border-radius: 9px;
 }}
 #PageTitle {{
     font-size: 17px;
@@ -101,7 +123,7 @@ QToolTip {{
 #Card, #BrowseChrome {{
     background: {surface};
     border: 1px solid {line};
-    border-radius: 10px;
+    border-radius: 9px;
 }}
 /* Plain containers must not paint the canvas colour over a card they sit on. */
 #FilterField {{ background: transparent; }}
@@ -135,9 +157,9 @@ QPlainTextEdit, QTextEdit {{
     background: {surface};
     color: {text};
     border: 1px solid {line_strong};
-    border-radius: 6px;
-    padding: 6px 10px;
-    min-height: 22px;
+    border-radius: 7px;
+    padding: 7px 10px;
+    min-height: 23px;
     selection-background-color: {brand};
     selection-color: #ffffff;
 }}
@@ -185,9 +207,9 @@ QPushButton {{
     background: {surface};
     color: {text};
     border: 1px solid {line_strong};
-    border-radius: 6px;
-    padding: 7px 16px;
-    min-height: 22px;
+    border-radius: 7px;
+    padding: 7px 15px;
+    min-height: 24px;
 }}
 QPushButton:hover {{ background: {surface_alt}; border-color: {text_faint}; }}
 QPushButton:pressed {{ background: {surface_muted}; }}
@@ -251,13 +273,16 @@ QPushButton[kind="ghost"] {{
 }}
 QPushButton[kind="ghost"]:hover {{ background: {brand_soft}; }}
 QPushButton[kind="ghost"]:disabled {{ color: {text_faint}; border-color: {line}; }}
+QPushButton[kind="primary"]:focus, QPushButton[kind="secondary"]:focus {{
+    border: 2px solid {focus};
+}}
 
 /* ====================== Tables / trees / lists =================== */
 QTableView, QTreeWidget, QTreeView, QListWidget {{
     background: {surface};
     color: {text};
     border: 1px solid {line};
-    border-radius: 10px;
+    border-radius: 9px;
     gridline-color: {grid};
     selection-background-color: {brand_soft};
     selection-color: {text};
@@ -269,14 +294,14 @@ QHeaderView::section {{
     color: {text_muted};
     border: none;
     border-left: 1px solid {line};
-    border-bottom: 1px solid {line_strong};
-    padding: 9px 10px;
+    border-bottom: 2px solid {line_strong};
+    padding: 10px 11px;
     font-weight: bold;
     font-size: 12px;
 }}
 QHeaderView::section:first {{ border-left: none; }}
 QTableView::item, QTreeWidget::item, QTreeView::item {{
-    padding: 6px 8px;
+    padding: 7px 9px;
     border: none;
 }}
 QTableView::item:hover, QTreeWidget::item:hover,
@@ -287,6 +312,10 @@ QTableView::item:selected, QTreeWidget::item:selected,
 QTreeView::item:selected, QListWidget::item:selected {{
     background: {brand_soft};
     color: {text};
+}}
+QTableView:focus, QTreeWidget:focus, QTreeView:focus,
+QListWidget:focus, QPlainTextEdit:focus, QTextEdit:focus {{
+    border: 1px solid {focus};
 }}
 QTableCornerButton::section {{ background: {surface_muted}; border: none; }}
 QListWidget::item {{ padding: 5px 8px; min-height: 22px; border-radius: 4px; }}
@@ -304,6 +333,7 @@ QTreeWidget::indicator:checked {{
     image: url({checkmark});
 }}
 QListWidget::indicator:hover, QCheckBox::indicator:hover {{ border-color: {focus}; }}
+QCheckBox::indicator:focus, QRadioButton::indicator:focus {{ border-color: {focus}; }}
 QCheckBox::indicator:disabled {{ background: {surface_muted}; border-color: {line}; }}
 
 /* ======================== Dialogs / menus ======================== */
@@ -361,6 +391,15 @@ QTabBar::tab:selected {{
 }}
 
 QCheckBox, QRadioButton {{ spacing: 8px; background: transparent; color: {text}; }}
+QCheckBox:focus, QRadioButton:focus {{ color: {brand}; }}
+#AttachmentEmpty {{
+    color: {text_muted};
+    background: {surface_alt};
+    border: 1px dashed {line_strong};
+    border-radius: 8px;
+    padding: 18px;
+    font-style: italic;
+}}
 QSplitter::handle {{ background: {line}; }}
 QLabel {{ background: transparent; }}
 
@@ -372,6 +411,14 @@ QStatusBar {{
 }}
 QStatusBar QLabel {{ color: {ink_text_dim}; background: transparent; font-size: 11px; }}
 QStatusBar::item {{ border: none; }}
+#StatusPath {{ color: {ink_text}; }}
+#StatusYear {{
+    color: {ink_text};
+    background: {ink_alt};
+    border-radius: 5px;
+    padding: 3px 8px;
+    font-weight: bold;
+}}
 
 #BalanceBar {{
     background: {surface_alt};

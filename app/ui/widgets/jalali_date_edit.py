@@ -110,6 +110,7 @@ class JalaliDateEdit(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         self.edit = QLineEdit()
+        self.setFocusProxy(self.edit)
         self.edit.setPlaceholderText("۱۴۰۵-۰۱-۱۵")
         self.edit.editingFinished.connect(self._normalize)
         today = QPushButton("امروز")

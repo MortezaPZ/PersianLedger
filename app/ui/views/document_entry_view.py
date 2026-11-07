@@ -46,6 +46,7 @@ from app.version import APP_NAME_FA
 class DocumentEntryView(BaseView):
     title = "ثبت سند"
     hint = "هر ارز جداگانه تراز می‌شود. تفصیلی ۱ و ۲ دو بُعد مستقل‌اند؛ با انتخاب تفصیلی، فهرست معین به اتصال‌های مجاز محدود می‌شود."
+    scrollable = True
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
@@ -78,6 +79,7 @@ class DocumentEntryView(BaseView):
         self.body.addWidget(card)
         self.model = LineGridModel(self.ctx.refdata)
         self.table = QTableView()
+        self.table.setAccessibleName("ردیف‌های سند")
         self.table.setModel(self.model)
         self.table.setItemDelegateForColumn(COL_ACCOUNT, AccountDelegate(self.table))
         self.t1 = TafsiliDelegate(1, self.table)
@@ -98,8 +100,11 @@ class DocumentEntryView(BaseView):
         self.body.addWidget(self.table, 1)
         buttons = QHBoxLayout()
         add = QPushButton("افزودن ردیف")
+        add.setProperty("kind", "secondary")
         dup = QPushButton("تکرار ردیف")
+        dup.setProperty("kind", "ghost")
         remove = QPushButton("حذف ردیف")
+        remove.setProperty("kind", "danger")
         add.clicked.connect(lambda: self.model.add_row())
         dup.clicked.connect(lambda: self.model.add_row(True))
         remove.clicked.connect(lambda: self.model.remove_row(self.table.currentIndex().row() if self.table.currentIndex().isValid() else len(self.model.rows) - 1))
@@ -108,9 +113,11 @@ class DocumentEntryView(BaseView):
         buttons.addWidget(remove)
         buttons.addStretch()
         self.save_btn = QPushButton("ذخیره پیش‌نویس")
+        self.save_btn.setProperty("kind", "secondary")
         self.post_btn = QPushButton("ثبت قطعی سند")
         self.post_btn.setProperty("kind", "primary")
         self.new_btn = QPushButton("سند جدید")
+        self.new_btn.setProperty("kind", "ghost")
         self.save_btn.clicked.connect(self.save_draft)
         self.post_btn.clicked.connect(self.post)
         self.new_btn.clicked.connect(self.new_document)

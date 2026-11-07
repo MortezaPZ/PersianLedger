@@ -60,6 +60,7 @@ class PickFromListDialog(QDialog):
 
 def combo_with_picker(combo, title: str = "انتخاب") -> QWidget:
     box = QWidget()
+    box.setFocusProxy(combo)
     row = QHBoxLayout(box)
     row.setContentsMargins(0, 0, 0, 0)
     row.setSpacing(4)

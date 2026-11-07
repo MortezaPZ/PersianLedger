@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QHeaderView, QTableView, QTableWidget
 
 DESC_MAX_WIDTH = 300
-ROW_HEIGHT = 30
+ROW_HEIGHT = 34
 
 
 def fit_columns(

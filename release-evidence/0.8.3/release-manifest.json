@@ -1,0 +1,22 @@
+{
+  "version": "0.8.3",
+  "branch": "hierarchical-tafsili-matrix",
+  "baseTag": "v0.8.2",
+  "installer": {
+    "path": "C:\\Users\\Moteza\\Desktop\\PersianLedger-Setup-0.8.3.exe",
+    "sizeBytes": 57103502,
+    "sha256": "9B5CBBC2F6FC5A2EA3E2590C5CED468D0DFC10D8CB9AB0604281C144B6B2061D",
+    "installerBuild": "PyInstaller + Inno Setup 6",
+    "databasePayload": "No ledger database is included. The setup script excludes portable data; a fresh startup creates the schema and starts with no users or documents. Existing installed data remains in its established ProgramData location during an upgrade."
+  },
+  "verification": {
+    "pytest": "178 passed, 41 skipped",
+    "compileall": "passed",
+    "pipCheck": "passed: no broken requirements",
+    "diffCheck": "passed",
+    "packagedStartup": "passed: frozen process remained alive for 12 seconds; then stopped by the smoke procedure",
+    "livePostgreSQL": "not run: PL_TEST_PG_URL and pg_dump unavailable",
+    "lintAndType": "not run: ruff and pyright not installed in project virtual environment"
+  },
+  "uiEvidence": "ui/ui-evidence.json"
+}

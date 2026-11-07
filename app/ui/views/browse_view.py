@@ -97,12 +97,13 @@ class BrowseView(ReportView):
         stepper_row.addWidget(self.up_button)
         chrome_layout.addWidget(stepper)
 
-        crumbs = QWidget()
-        crumbs.setObjectName("BreadcrumbBar")
-        self.crumb_row = QHBoxLayout(crumbs)
+        self.crumbs = QWidget()
+        self.crumbs.setObjectName("BreadcrumbBar")
+        self.crumbs.setVisible(False)
+        self.crumb_row = QHBoxLayout(self.crumbs)
         self.crumb_row.setContentsMargins(0, 0, 0, 0)
         self.crumb_row.setSpacing(4)
-        chrome_layout.addWidget(crumbs)
+        chrome_layout.addWidget(self.crumbs)
 
         hint = QLabel("دابل‌کلیک روی سطر — یا کلید Enter — یک سطح پایین‌تر می‌رود. روی سطح‌ها یا مسیر بالا کلیک کنید تا برگردید.")
         hint.setObjectName("BrowseHint")
@@ -112,6 +113,7 @@ class BrowseView(ReportView):
 
         self.model = TrialBalanceModel()
         self.table = QTableView()
+        self.table.setAccessibleName("نتیجهٔ مرور حساب‌ها")
         self.table.setModel(self.model)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -182,6 +184,7 @@ class BrowseView(ReportView):
         _clear_layout(self.crumb_row)
         labels = ["همه حساب‌ها"] + [label for _key, _from, label in self._trail]
         current = len(labels) - 1
+        self.crumbs.setVisible(bool(self._trail))
         for index, text in enumerate(labels):
             if index:
                 sep = QLabel("‹")

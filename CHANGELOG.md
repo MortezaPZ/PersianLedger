@@ -1,14 +1,21 @@
 # PersianLedger changelog
 
-## 0.8.1
+## 0.8.3
 
-- Updated the floating-detail screen to match the requested workflow: browse detail groups and parent-child details in a tree, then review the selected branch in a separate information table.
-- Selecting a group, parent, or detail shows its applicable details and descendants while preserving group memberships and linked subsidiary accounts.
+- Refined the light and dark palettes, improving contrast for helper text, controls, and table headers.
+- Added a compact product mark to the navigation rail, clearer page-header hierarchy, and a readable fiscal-year status badge.
+- Made keyboard focus easier to see across navigation, tables, and text areas; clarified which document-entry actions are primary, secondary, and destructive.
+- Added an explicit empty-state message to the document attachments list and increased table row spacing for easier scanning.
 
 ## 0.8.2
 
 - Refined the floating-detail hierarchy with visible tree connectors, distinct icons, contextual actions, and branch/sub-branch wording.
 - Prevented the same floating detail from being selected in both detail fields on one voucher line, with matching service validation.
+
+## 0.8.1
+
+- Updated the floating-detail screen to match the requested workflow: browse detail groups and parent-child details in a tree, then review the selected branch in a separate information table.
+- Selecting a group, parent, or detail shows its applicable details and descendants while preserving group memberships and linked subsidiary accounts.
 
 ## 0.8.0
 

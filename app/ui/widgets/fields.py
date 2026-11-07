@@ -22,6 +22,8 @@ def labeled(label: str, widget: QWidget) -> QWidget:
     column.setSpacing(4)
     caption = QLabel(label or " ")
     caption.setObjectName("FieldLabel")
+    if label:
+        caption.setBuddy(widget)
     column.addWidget(caption)
     column.addWidget(widget)
     column.addStretch()

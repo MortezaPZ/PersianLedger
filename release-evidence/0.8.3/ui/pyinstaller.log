@@ -1,0 +1,115 @@
+257 INFO: PyInstaller: 6.14.2, contrib hooks: 2026.9
+257 INFO: Python: 3.11.9
+273 INFO: Platform: Windows-10-10.0.28000-SP0
+273 INFO: Python environment: F:\Code\PersianLedgerUpdate\.venv
+281 INFO: Removing temporary files and cleaning cache in C:\Users\Moteza\AppData\Local\pyinstaller
+130 WARNING: Failed to collect submodules for 'psycopg_binary' because importing 'psycopg_binary' raised: ImportError: the psycopg package should be imported before psycopg_binary
+1467 INFO: Module search paths (PYTHONPATH):
+['F:\\Code\\PersianLedgerUpdate',
+ 'C:\\Users\\Moteza\\AppData\\Local\\Programs\\Python\\Python311\\python311.zip',
+ 'C:\\Users\\Moteza\\AppData\\Local\\Programs\\Python\\Python311\\DLLs',
+ 'C:\\Users\\Moteza\\AppData\\Local\\Programs\\Python\\Python311\\Lib',
+ 'C:\\Users\\Moteza\\AppData\\Local\\Programs\\Python\\Python311',
+ 'F:\\Code\\PersianLedgerUpdate\\.venv',
+ 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages',
+ 'F:\\Code\\PersianLedgerUpdate',
+ 'F:\\Code\\PersianLedgerUpdate']
+1874 INFO: Appending 'binaries' from .spec
+1879 INFO: Appending 'datas' from .spec
+1886 INFO: checking Analysis
+1886 INFO: Building Analysis because Analysis-00.toc is non existent
+1886 INFO: Running Analysis Analysis-00.toc
+1886 INFO: Target bytecode optimization level: 0
+1886 INFO: Initializing module dependency graph...
+1891 INFO: Initializing module graph hook caches...
+1897 INFO: Analyzing modules for base_library.zip ...
+3314 INFO: Processing standard module hook 'hook-heapq.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3387 INFO: Processing standard module hook 'hook-encodings.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5931 INFO: Processing standard module hook 'hook-pickle.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8640 INFO: Caching module dependency graph...
+8714 INFO: Looking for Python shared library...
+8756 INFO: Using Python shared library: C:\Users\Moteza\AppData\Local\Programs\Python\Python311\python311.dll
+8756 INFO: Analyzing F:\Code\PersianLedgerUpdate\run.py
+8807 INFO: Processing standard module hook 'hook-PySide6.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+9199 INFO: Processing standard module hook 'hook-shiboken6.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+9387 INFO: Processing standard module hook 'hook-PySide6.QtNetwork.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+11150 INFO: Processing standard module hook 'hook-PySide6.QtCore.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+12771 INFO: Processing standard module hook 'hook-PySide6.QtWidgets.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+14589 INFO: Processing standard module hook 'hook-PySide6.QtGui.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15405 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+16422 INFO: Processing standard module hook 'hook-platform.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+16428 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+16434 INFO: SetuptoolsInfo: initializing cached setuptools info...
+17641 INFO: Processing standard module hook 'hook-importlib_metadata.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+17751 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+17848 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+18221 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+18534 INFO: Processing standard module hook 'hook-xml.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+22501 INFO: Processing standard module hook 'hook-keyring.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+23233 INFO: Processing pre-safe-import-module hook 'hook-jaraco.context.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23436 INFO: Processing pre-safe-import-module hook 'hook-backports.tarfile.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23504 INFO: Processing standard module hook 'hook-backports.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+23514 INFO: Processing pre-safe-import-module hook 'hook-jaraco.functools.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23519 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23748 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+23774 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+24146 INFO: Processing standard module hook 'hook-mako.codegen.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+24307 INFO: Processing standard module hook 'hook-pygments.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26367 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+26392 INFO: Processing standard module hook 'hook-sysconfig.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+27314 INFO: Processing standard module hook 'hook-psycopg_binary.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+27888 INFO: Processing standard module hook 'hook-sqlite3.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+28685 INFO: Processing standard module hook 'hook-openpyxl.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+28918 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+29682 INFO: Processing standard module hook 'hook-PySide6.QtPrintSupport.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30141 INFO: Analyzing hidden import 'keyring.backends.Windows'
+30147 INFO: Processing standard module hook 'hook-win32ctypes.core.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30773 INFO: Analyzing hidden import 'psycopg._dns'
+30779 INFO: Analyzing hidden import 'psycopg.crdb'
+30791 INFO: Analyzing hidden import 'psycopg.pq._debug'
+30795 INFO: Analyzing hidden import 'psycopg.types.shapely'
+30798 INFO: Processing module hooks (post-graph stage)...
+30821 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+32333 INFO: Processing standard module hook 'hook-sqlalchemy.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+32847 WARNING: Hidden import "pysqlite2" not found!
+32847 WARNING: Hidden import "MySQLdb" not found!
+32923 INFO: Processing standard module hook 'hook-tzdata.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+33514 INFO: Performing binary vs. data reclassification (1026 entries)
+33847 INFO: Looking for ctypes DLLs
+33913 INFO: Analyzing run-time hooks ...
+33920 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+33920 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+33920 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+33920 INFO: Including run-time hook 'pyi_rth_pyside6.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+33920 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+33936 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+33971 INFO: Creating base_library.zip...
+34020 INFO: Looking for dynamic libraries
+35570 INFO: Extra DLL search directories (AddDllDirectory): ['F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\shiboken6', 'F:\\Code\\PersianLedgerUpdate\\.venv\\Lib\\site-packages\\psycopg_binary.libs']
+35570 INFO: Extra DLL search directories (PATH): []
+38397 INFO: Warnings written to C:\Users\Moteza\AppData\Local\Temp\PersianLedger-0.8.3-build-20261107-221645\work\persianledger\warn-persianledger.txt
+38516 INFO: Graph cross-reference written to C:\Users\Moteza\AppData\Local\Temp\PersianLedger-0.8.3-build-20261107-221645\work\persianledger\xref-persianledger.html
+38574 INFO: checking PYZ
+38574 INFO: Building PYZ because PYZ-00.toc is non existent
+38574 INFO: Building PYZ (ZlibArchive) C:\Users\Moteza\AppData\Local\Temp\PersianLedger-0.8.3-build-20261107-221645\work\persianledger\PYZ-00.pyz
+39954 INFO: Building PYZ (ZlibArchive) C:\Users\Moteza\AppData\Local\Temp\PersianLedger-0.8.3-build-20261107-221645\work\persianledger\PYZ-00.pyz completed successfully.
+39987 INFO: checking PKG
+39987 INFO: Building PKG because PKG-00.toc is non existent
+39987 INFO: Building PKG (CArchive) PersianLedger.pkg
+40020 INFO: Building PKG (CArchive) PersianLedger.pkg completed successfully.
+40020 INFO: Bootloader F:\Code\PersianLedgerUpdate\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+40020 INFO: checking EXE
+40020 INFO: Building EXE because EXE-00.toc is non existent
+40020 INFO: Building EXE from EXE-00.toc
+40020 INFO: Copying bootloader EXE to C:\Users\Moteza\AppData\Local\Temp\PersianLedger-0.8.3-build-20261107-221645\work\persianledger\PersianLedger.exe
+40088 INFO: Copying icon to EXE
+40157 INFO: Copying 0 resources to EXE
+40157 INFO: Embedding manifest in EXE
+40236 INFO: Appending PKG archive to EXE
+40313 INFO: Fixing EXE headers
+40610 INFO: Building EXE from EXE-00.toc completed successfully.
+40619 INFO: checking COLLECT
+40619 INFO: Building COLLECT because COLLECT-00.toc is non existent
+40619 INFO: Building COLLECT COLLECT-00.toc
+42340 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+42366 INFO: Build complete! The results are available in: C:\Users\Moteza\AppData\Local\Temp\PersianLedger-0.8.3-build-20261107-221645\dist

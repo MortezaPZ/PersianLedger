@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtCore import QUrl
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
 from app.services import attachment_service
 
@@ -21,8 +21,17 @@ class AttachmentPanel(QWidget):
         title.setObjectName("SectionTitle")
         layout.addWidget(title)
         self.list = QListWidget()
+        self.list.setObjectName("AttachmentList")
+        self.list.setAccessibleName("فهرست پیوست‌های سند")
         self.list.itemDoubleClicked.connect(self.open_selected)
-        layout.addWidget(self.list)
+        self.content = QStackedWidget()
+        self.content.addWidget(self.list)
+        self.empty_label = QLabel()
+        self.empty_label.setObjectName("AttachmentEmpty")
+        self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setWordWrap(True)
+        self.content.addWidget(self.empty_label)
+        layout.addWidget(self.content, 1)
         buttons = QHBoxLayout()
         self.add_btn = QPushButton("افزودن")
         self.open_btn = QPushButton("باز کردن")
@@ -45,11 +54,20 @@ class AttachmentPanel(QWidget):
         self.add_btn.setEnabled(enabled and not (document and document.is_posted))
         self.remove_btn.setEnabled(enabled and not (document and document.is_posted))
         if not document:
+            self._show_empty_hint("برای افزودن پیوست، ابتدا سند را ذخیره کنید.")
             return
         for att in document.attachments:
             item = QListWidgetItem(f"{att.original_name}  ({att.size_bytes // 1024} KB)")
             item.setData(Qt.UserRole, att)
             self.list.addItem(item)
+        if self.list.count() == 0:
+            self._show_empty_hint("برای این سند پیوستی ثبت نشده است.")
+        else:
+            self.content.setCurrentWidget(self.list)
+
+    def _show_empty_hint(self, text: str) -> None:
+        self.empty_label.setText(text)
+        self.content.setCurrentWidget(self.empty_label)
 
     def add_files(self) -> None:
         if not self.document:

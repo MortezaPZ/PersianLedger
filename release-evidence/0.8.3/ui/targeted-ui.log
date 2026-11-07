@@ -1,0 +1,11 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.0.3, pluggy-1.7.0 -- F:\Code\PersianLedgerUpdate\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: F:\Code\PersianLedgerUpdate
+configfile: pytest.ini
+collecting ... collected 2 items
+
+tests/test_feedback_ui.py::test_settings_has_currency_and_year_actions PASSED [ 50%]
+tests/test_feedback_ui.py::test_save_draft_does_not_crash_attachment_panel PASSED [100%]
+
+============================== 2 passed in 2.22s ==============================
