@@ -17,6 +17,7 @@ COL_NO, COL_ACCOUNT, COL_T1, COL_T2, COL_CURRENCY, COL_DEBIT, COL_CREDIT, COL_DE
 HEADERS = ("ردیف", "سرفصل", "تفصیلی ۱", "تفصیلی ۲", "ارز", "بدهکار", "بستانکار", "شرح")
 PICKER_COLUMNS = {COL_ACCOUNT, COL_T1, COL_T2, COL_CURRENCY}
 NEW_TAFSILI = -1
+CLEAR_TAFSILI = -2
 NEW_TAFSILI_LABEL = "+  تعریف تفصیلی جدید…"
 
 
@@ -130,9 +131,15 @@ class LineGridModel(QAbstractTableModel):
         if column == COL_ACCOUNT:
             self._set_account(row, int(value) if value not in (None, "") else None)
         elif column == COL_T1:
-            row.tafsili1_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
+            tafsili_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
+            if tafsili_id is not None and tafsili_id == row.tafsili2_id:
+                return False
+            row.tafsili1_id = tafsili_id
         elif column == COL_T2:
-            row.tafsili2_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
+            tafsili_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
+            if tafsili_id is not None and tafsili_id == row.tafsili1_id:
+                return False
+            row.tafsili2_id = tafsili_id
         elif column == COL_CURRENCY:
             row.currency_id = int(value) if value not in (None, "") else None
         elif column in (COL_DEBIT, COL_CREDIT):
@@ -366,17 +373,30 @@ class TafsiliDelegate(PickerDelegate):
             return
         combo.addItem("", None)
         items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.final_tafsilis()
-        for item in items:
-            combo.addItem(item.display, item.id)
-        combo.addItem(NEW_TAFSILI_LABEL, NEW_TAFSILI)
         current = row.tafsili1_id if self.slot == 1 else row.tafsili2_id
+        other = row.tafsili2_id if self.slot == 1 else row.tafsili1_id
+        for item in items:
+            if item.id == other and item.id != current:
+                continue
+            combo.addItem(item.display, item.id)
+            if item.id == other:
+                entry = combo.model().item(combo.count() - 1)
+                if entry is not None:
+                    entry.setEnabled(False)
+        if current and current == other:
+            combo.addItem("پاک‌کردن تفصیلی تکراری", CLEAR_TAFSILI)
+        combo.addItem(NEW_TAFSILI_LABEL, NEW_TAFSILI)
         if current:
             pos = combo.findData(current)
             if pos >= 0:
                 combo.setCurrentIndex(pos)
 
     def setModelData(self, editor, model, index) -> None:
-        value = self._combo(editor).currentData()
+        combo = self._combo(editor)
+        value = combo.currentData()
+        if value == CLEAR_TAFSILI:
+            model.setData(index, None)
+            return
         if value == NEW_TAFSILI:
             self.requestNewTafsili.emit(index.row(), self.slot)
             return
@@ -386,11 +406,20 @@ class TafsiliDelegate(PickerDelegate):
         model: LineGridModel = index.model()
         row = model.rows[index.row()]
         items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.final_tafsilis()
-        eligible = {item.id for item in items}
+        current = row.tafsili1_id if self.slot == 1 else row.tafsili2_id
+        other = row.tafsili2_id if self.slot == 1 else row.tafsili1_id
+        eligible = {item.id for item in items if item.id != other}
         visible = set(eligible)
         by_id = model.ref.tafsili_by_id
+        if current in by_id:
+            visible.add(current)
         for ident in list(eligible):
             parent = by_id.get(ident).parent if ident in by_id else None
+            while parent is not None:
+                visible.add(parent.id)
+                parent = parent.parent
+        if current in by_id:
+            parent = by_id[current].parent
             while parent is not None:
                 visible.add(parent.id)
                 parent = parent.parent

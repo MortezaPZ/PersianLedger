@@ -22,6 +22,8 @@ from app.db.models import Account, AccountTafsiliRule, Currency, Tafsili, Tafsil
 from app.db.engine import build_engine
 from app.domain.errors import ConcurrencyError, ValidationError
 from app.services import document_service, master_data
+from app.ui.refdata import RefData
+from app.ui.widgets.line_grid import CLEAR_TAFSILI, COL_ACCOUNT, COL_T1, COL_T2, LineGridModel, TafsiliDelegate
 
 
 def _balanced_input(session, first_account, *, tafsili1_id=None, tafsili2_id=None):
@@ -96,6 +98,76 @@ def test_document_rejects_tafsili2_when_account_has_no_tafsili2_rule(db_session)
 
     with pytest.raises(ValidationError, match=re.escape("خطا: حساب طبق تعریف فاقد تفصیلی ۲ است.")):
         document_service.validate(db_session, _balanced_input(db_session, account, tafsili2_id=tafsili.id))
+
+
+def test_document_rejects_same_tafsili_in_both_slots(db_session):
+    seed.seed_base(db_session)
+    account = db_session.execute(select(Account).where(Account.code == "1001")).scalar_one()
+    group = db_session.execute(select(TafsiliGroup).where(TafsiliGroup.code == "20")).scalar_one()
+    tafsili = db_session.execute(select(Tafsili).where(Tafsili.code == "1101")).scalar_one()
+    account.tafsili_rules.append(AccountTafsiliRule(tafsili_group_id=group.id, slot=2))
+    db_session.flush()
+
+    with pytest.raises(
+        ValidationError,
+        match=re.escape("ردیف 1: یک تفصیلی را نمی‌توان هم‌زمان در جایگاه‌های ۱ و ۲ ثبت کرد."),
+    ):
+        document_service.validate(
+            db_session,
+            _balanced_input(
+                db_session,
+                account,
+                tafsili1_id=tafsili.id,
+                tafsili2_id=tafsili.id,
+            ),
+        )
+
+
+def test_document_line_picker_blocks_duplicate_between_tafsili_slots(db_session, qapp):
+    seed.seed_base(db_session)
+    account = db_session.execute(select(Account).where(Account.code == "1001")).scalar_one()
+    group = db_session.execute(select(TafsiliGroup).where(TafsiliGroup.code == "20")).scalar_one()
+    tafsili = db_session.execute(select(Tafsili).where(Tafsili.code == "1101")).scalar_one()
+    account.tafsili_rules.append(AccountTafsiliRule(tafsili_group_id=group.id, slot=2))
+    db_session.flush()
+
+    refdata = RefData.load(db_session)
+    model = LineGridModel(refdata)
+    account_index = model.index(0, COL_ACCOUNT)
+    assert model.setData(account_index, account.id)
+    first_index = model.index(0, COL_T1)
+    second_index = model.index(0, COL_T2)
+    assert model.setData(first_index, tafsili.id)
+
+    second_delegate = TafsiliDelegate(2)
+    second_combo = second_delegate.createEditor(None, None, second_index)
+    offered_in_second = {second_combo.itemData(i) for i in range(second_combo.count())}
+    assert tafsili.id not in offered_in_second
+    assert tafsili.id not in {ident for ident, _label, _parent, _selectable in second_delegate.tree_choices(second_index)}
+    assert not model.setData(second_index, tafsili.id)
+    assert model.rows[0].tafsili2_id is None
+
+    assert model.setData(first_index, None)
+    assert model.setData(second_index, tafsili.id)
+    first_delegate = TafsiliDelegate(1)
+    first_combo = first_delegate.createEditor(None, None, first_index)
+    offered_in_first = {first_combo.itemData(i) for i in range(first_combo.count())}
+    assert tafsili.id not in offered_in_first
+    assert tafsili.id not in {ident for ident, _label, _parent, _selectable in first_delegate.tree_choices(first_index)}
+    assert not model.setData(first_index, tafsili.id)
+    assert model.rows[0].tafsili1_id is None
+
+    model.rows[0].tafsili1_id = tafsili.id
+    model.rows[0].tafsili2_id = tafsili.id
+    legacy_duplicate = second_delegate.createEditor(None, None, second_index)
+    duplicate_index = legacy_duplicate.findData(tafsili.id)
+    assert duplicate_index >= 0
+    assert not legacy_duplicate.model().item(duplicate_index).isEnabled()
+    second_delegate.setModelData(legacy_duplicate, model, second_index)
+    assert model.rows[0].tafsili2_id == tafsili.id
+    legacy_duplicate.setCurrentIndex(legacy_duplicate.findData(CLEAR_TAFSILI))
+    second_delegate.setModelData(legacy_duplicate, model, second_index)
+    assert model.rows[0].tafsili2_id is None
 
 
 def test_specific_parent_rule_allows_descendant_leaf(db_session):
@@ -597,4 +669,24 @@ def test_tafsili_register_renders_the_parent_child_tree(qapp, tmp_path):
     assert parent_item is not None
     assert child_item is not None
     assert child_item.parent() is parent_item
+    assert parent_item.isExpanded()
+    assert not parent_item.icon(0).isNull()
+    assert not child_item.icon(0).isNull()
+    assert view.tree.contextMenuPolicy() == Qt.CustomContextMenu
+    assert "::branch:has-siblings" in view.tree.styleSheet()
+    assert "والد" not in view.hint and "فرزند" not in view.hint
+    from app.ui.views.tafsili_view import _tree_language
+
+    translated = _tree_language("تفصیلی والد انتخاب‌شده یافت نشد.")
+    assert "والد" not in translated and "فرزند" not in translated
+    assert "شاخهٔ بالاتر" in translated
+    from PySide6.QtWidgets import QLabel, QPushButton
+    from app.ui.views.tafsili_view import TafsiliDialog
+
+    dialog = TafsiliDialog(context)
+    dialog_labels = [label.text() for label in dialog.findChildren(QLabel)]
+    visible_labels = dialog_labels + [button.text() for button in view.findChildren(QPushButton)]
+    assert "شاخهٔ بالاتر" in dialog_labels
+    assert not any("والد" in label or "فرزند" in label for label in visible_labels)
+    dialog.close()
     view.close()

@@ -199,7 +199,7 @@ class DocumentEntryView(BaseView):
             self.inform(f"پیش‌نویس شماره {number} ذخیره شد.")
             self.ctx.dataChanged.emit()
         except LedgerError as exc:
-            self.warn(str(exc))
+            self.warn(str(exc).replace("والد آن", "شاخهٔ بالاتر آن"))
             if isinstance(exc, ConcurrencyError) and self.document_id:
                 self.load_document(self.document_id)
         except Exception as exc:
@@ -224,7 +224,7 @@ class DocumentEntryView(BaseView):
             self.ctx.dataChanged.emit()
             self.ctx.reload_refdata()
         except LedgerError as exc:
-            self.warn(str(exc))
+            self.warn(str(exc).replace("والد آن", "شاخهٔ بالاتر آن"))
             if isinstance(exc, ConcurrencyError) and self.document_id:
                 self.load_document(self.document_id)
         except Exception as exc:

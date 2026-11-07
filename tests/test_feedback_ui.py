@@ -377,7 +377,7 @@ def test_floating_detail_page_deletes_an_unused_detail(qapp, tmp_path):
     ctx.reload_refdata()
     view = TafsiliView(ctx)
     row = next(i for i in range(view.table.rowCount()) if view.table.item(i, 0).text() == "ZZ-DELETE")
-    view.table.selectRow(row)
+    view.table.setCurrentCell(row, 0)
     with patch.object(view, "confirm", return_value=True):
         view.delete_current()
     with ctx.read_session() as db:

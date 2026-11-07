@@ -190,6 +190,10 @@ def validate(session: Session, data: DocumentInput) -> None:
     for index, line in enumerate(filled, start=1):
         if not line.account_id:
             raise ValidationError(f"ردیف {index}: سرفصل انتخاب نشده است.")
+        if line.tafsili1_id is not None and line.tafsili1_id == line.tafsili2_id:
+            raise ValidationError(
+                f"ردیف {index}: یک تفصیلی را نمی‌توان هم‌زمان در جایگاه‌های ۱ و ۲ ثبت کرد."
+            )
         account = accounts.get(line.account_id)
         if account is None:
             raise ValidationError(f"ردیف {index}: سرفصل انتخاب نشده است.")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QSplitter,
     QTableWidget,
@@ -26,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from app.domain.errors import LedgerError
 from app.services import master_data
+from app.ui import icons, theme
 from app.ui.views.base_view import BaseView
 from app.ui.widgets import fields
 from app.ui.widgets.pickers import combo_with_picker
@@ -47,7 +50,7 @@ class TafsiliDialog(QDialog):
         self.group.currentIndexChanged.connect(self._suggest)
         self.group.currentIndexChanged.connect(self._sync_home_row)
         self.parent_picker = QComboBox()
-        self.parent_picker.addItem("بدون والد — ریشه", None)
+        self.parent_picker.addItem("شاخهٔ اصلی", None)
         blocked_ids = {item.id} if item else set()
         if item:
             for candidate in context.refdata.tafsilis:
@@ -90,7 +93,7 @@ class TafsiliDialog(QDialog):
             self.linked_meoin.addItem(it)
         self.group.currentIndexChanged.connect(self._sync_linked_meoin)
         form.addRow("گروه اصلی", combo_with_picker(self.group, "انتخاب گروه"))
-        form.addRow("والد", combo_with_picker(self.parent_picker, "انتخاب والد از درخت تفصیلی"))
+        form.addRow("شاخهٔ بالاتر", combo_with_picker(self.parent_picker, "انتخاب شاخهٔ بالاتر از درخت تفصیلی"))
         form.addRow("کد", self.code)
         form.addRow("نام", self.name)
         form.addRow("عضویت در گروه‌های دیگر", self.extras)
@@ -221,12 +224,26 @@ class TafsiliDialog(QDialog):
         except LedgerError as exc:
             from PySide6.QtWidgets import QMessageBox
 
-            QMessageBox.warning(self, APP_NAME_FA, str(exc))
+            QMessageBox.warning(self, APP_NAME_FA, _tree_language(str(exc)))
+
+
+def _tree_language(message: str) -> str:
+    """Use familiar tree terms in the interface while keeping service contracts intact."""
+    return (
+        message.replace("ساختار والد و فرزند", "ساختار درخت تفصیلی")
+        .replace("والد انتخاب‌شده", "شاخهٔ بالاتر انتخاب‌شده")
+        .replace("والد آن", "شاخهٔ بالاتر آن")
+        .replace("این والد", "این شاخهٔ بالاتر")
+        .replace("فرزندان را", "زیرشاخه‌ها را")
+        .replace("فرزند دارد", "زیرشاخه دارد")
+        .replace("فرزند", "زیرشاخه")
+        .replace("والد", "شاخهٔ بالاتر")
+    )
 
 
 class TafsiliView(BaseView):
     title = "تفصیلی شناور"
-    hint = "تفصیلی‌ها را در درخت والد و فرزند مدیریت کنید. گروه‌ها دسته‌بندی مستقل‌اند؛ در سند همچنان دو خانهٔ تفصیلی ۱ و ۲ وجود دارد."
+    hint = "تفصیلی‌ها را در درخت شاخه‌ها و زیرشاخه‌ها مدیریت کنید. گروه‌ها دسته‌بندی مستقل‌اند؛ در سند همچنان دو خانهٔ تفصیلی ۱ و ۲ وجود دارد."
 
     def __init__(self, context, parent=None) -> None:
         super().__init__(context, parent)
@@ -235,18 +252,26 @@ class TafsiliView(BaseView):
         self.filter.addItem("همه گروه‌ها", None)
         add = QPushButton("تفصیلی جدید")
         add.setProperty("kind", "primary")
+        add.setIcon(icons.icon("plus", theme.current_palette().text_on_brand))
         add.clicked.connect(self.create)
         add_group = QPushButton("گروه تفصیلی جدید")
+        add_group.setIcon(icons.icon("folder", theme.current_palette().brand))
         add_group.clicked.connect(self.create_group)
         edit = QPushButton("ویرایش")
+        edit.setIcon(icons.icon("edit", theme.current_palette().text_muted))
         edit.clicked.connect(self.edit)
-        child = QPushButton("فرزند جدید")
+        child = QPushButton("زیرشاخهٔ جدید")
+        child.setIcon(icons.icon("tree", theme.current_palette().brand))
         child.clicked.connect(self.create_child)
         toggle = QPushButton("فعال / غیرفعال")
+        toggle.setIcon(icons.icon("check", theme.current_palette().success))
         toggle.clicked.connect(self.toggle_active)
         remove = QPushButton("حذف")
         remove.setProperty("kind", "danger")
+        remove.setIcon(icons.icon("trash", theme.current_palette().danger))
         remove.clicked.connect(self.delete_current)
+        for button in (add, add_group, edit, child, toggle, remove):
+            button.setIconSize(QSize(16, 16))
         bar.addWidget(QLabel("گروه"))
         bar.addWidget(combo_with_picker(self.filter, "فیلتر گروه"))
         bar.addStretch()
@@ -263,12 +288,31 @@ class TafsiliView(BaseView):
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setLayoutDirection(Qt.LeftToRight)
         self.tree = QTreeWidget()
+        self.tree.setObjectName("TafsiliStructureTree")
         self.tree.setHeaderHidden(True)
         self.tree.setColumnCount(1)
-        self.tree.setIndentation(18)
-        self.tree.setMinimumWidth(220)
+        self.tree.setIndentation(25)
+        self.tree.setMinimumWidth(250)
+        self.tree.setIconSize(QSize(17, 17))
+        self.tree.setUniformRowHeights(True)
+        self.tree.setAnimated(True)
         self.tree.setLayoutDirection(Qt.RightToLeft)
-        self.tree.setToolTip("گروه‌ها و تفصیلی‌های والد و فرزند را برای مرور انتخاب کنید.")
+        self.tree.setToolTip("گروه‌ها و تفصیلی‌ها را در شاخه‌های درخت مرور کنید.")
+        branch_line = theme.current_palette().line_strong
+        self.tree.setStyleSheet(
+            "QTreeWidget#TafsiliStructureTree::branch:has-siblings:!adjoins-item {"
+            f"border-right: 1px solid {branch_line};"
+            "}"
+            "QTreeWidget#TafsiliStructureTree::branch:has-siblings:adjoins-item {"
+            f"border-right: 1px solid {branch_line}; border-bottom: 1px solid {branch_line};"
+            "}"
+            "QTreeWidget#TafsiliStructureTree::branch:!has-siblings:adjoins-item {"
+            f"border-bottom: 1px solid {branch_line};"
+            "}"
+            "QTreeWidget#TafsiliStructureTree::item { min-height: 22px; padding: 6px 7px; }"
+        )
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._show_tree_menu)
 
         listing = QWidget()
         listing_layout = QVBoxLayout(listing)
@@ -364,6 +408,7 @@ class TafsiliView(BaseView):
         self._reloading = True
         self.tree.clear()
         root = QTreeWidgetItem(["تفصیلی‌ها"])
+        root.setIcon(0, icons.icon("tree", theme.current_palette().brand))
         root.setData(0, Qt.UserRole, ("root", None))
         root.setToolTip(0, "همهٔ گروه‌ها و تفصیلی‌ها")
         self.tree.addTopLevelItem(root)
@@ -373,6 +418,7 @@ class TafsiliView(BaseView):
             if gid is not None and group.id != gid:
                 continue
             group_node = QTreeWidgetItem([f"{group.code} {group.name}"])
+            group_node.setIcon(0, icons.icon("folder", theme.current_palette().brand))
             group_node.setData(0, Qt.UserRole, ("group", group.id))
             group_node.setToolTip(0, f"گروه تفصیلی: {group.name}")
             root.addChild(group_node)
@@ -394,10 +440,23 @@ class TafsiliView(BaseView):
                     group_visible.add(parent_id)
                     pending.append(parent_id)
 
+            group_parent_ids = {
+                payload_by_id[ident][0].parent_id
+                for ident in group_visible
+                if payload_by_id[ident][0].parent_id is not None
+            }
             nodes: dict[int, QTreeWidgetItem] = {}
             for ident in sorted(group_visible, key=lambda value: payload_by_id[value][0].code):
                 item, _values = payload_by_id[ident]
                 node = QTreeWidgetItem([item.display])
+                has_children = ident in group_parent_ids
+                node.setIcon(
+                    0,
+                    icons.icon(
+                        "folder" if has_children else "tag",
+                        theme.current_palette().text_muted if not has_children else theme.current_palette().brand,
+                    ),
+                )
                 node.setData(0, Qt.UserRole, item.id)
                 node.setToolTip(0, f"تفصیلی {item.code} — {item.name}")
                 nodes[ident] = node
@@ -411,7 +470,8 @@ class TafsiliView(BaseView):
 
         root.setExpanded(True)
         for index in range(root.childCount()):
-            root.child(index).setExpanded(gid is not None)
+            root.child(index).setExpanded(True)
+        self.tree.expandToDepth(3)
         self._reloading = False
 
         target = root
@@ -432,6 +492,37 @@ class TafsiliView(BaseView):
         node = self.tree.currentItem()
         data = node.data(0, Qt.UserRole) if node else None
         return data if isinstance(data, int) else None
+
+    def _show_tree_menu(self, position) -> None:
+        item = self.tree.itemAt(position)
+        if item is None:
+            return
+        self.tree.setCurrentItem(item)
+        data = item.data(0, Qt.UserRole)
+        is_detail = isinstance(data, int)
+        palette = theme.current_palette()
+        menu = QMenu(self)
+        add_detail = QAction(icons.icon("plus", palette.brand), "تفصیلی جدید", menu)
+        add_detail.triggered.connect(self.create)
+        menu.addAction(add_detail)
+        add_group = QAction(icons.icon("folder", palette.brand), "گروه تفصیلی جدید", menu)
+        add_group.triggered.connect(self.create_group)
+        menu.addAction(add_group)
+        if is_detail:
+            menu.addSeparator()
+            add_branch = QAction(icons.icon("tree", palette.brand), "زیرشاخهٔ جدید", menu)
+            add_branch.triggered.connect(self.create_child)
+            menu.addAction(add_branch)
+            edit = QAction(icons.icon("edit", palette.text_muted), "ویرایش تفصیلی", menu)
+            edit.triggered.connect(self.edit)
+            menu.addAction(edit)
+            toggle = QAction(icons.icon("check", palette.success), "فعال / غیرفعال", menu)
+            toggle.triggered.connect(self.toggle_active)
+            menu.addAction(toggle)
+            delete = QAction(icons.icon("trash", palette.danger), "حذف تفصیلی", menu)
+            delete.triggered.connect(self.delete_current)
+            menu.addAction(delete)
+        menu.exec(self.tree.viewport().mapToGlobal(position))
 
     def _tree_selection_changed(self, current, _previous) -> None:
         if self._reloading or self._syncing_selection or current is None:
@@ -520,7 +611,7 @@ class TafsiliView(BaseView):
     def create_child(self) -> None:
         parent_id = self._current_id()
         if not parent_id:
-            self.warn("برای ایجاد فرزند ابتدا یک تفصیلی را انتخاب کنید.")
+            self.warn("برای ایجاد زیرشاخه، ابتدا یک شاخهٔ تفصیلی را انتخاب کنید.")
             return
         if TafsiliDialog(self.ctx, self, parent_id=parent_id).exec():
             self.ctx.reload_refdata()
@@ -544,7 +635,7 @@ class TafsiliView(BaseView):
             self.refresh()
             self.inform("تفصیلی فعال شد." if active else "تفصیلی غیرفعال شد.")
         except LedgerError as exc:
-            self.warn(str(exc))
+            self.warn(_tree_language(str(exc)))
         except Exception as exc:
             self.report_error(exc)
 
@@ -562,7 +653,7 @@ class TafsiliView(BaseView):
             self.refresh()
             self.inform("گروه تفصیلی ایجاد شد.")
         except LedgerError as exc:
-            self.warn(str(exc))
+            self.warn(_tree_language(str(exc)))
         except Exception as exc:
             self.report_error(exc)
 
@@ -584,7 +675,7 @@ class TafsiliView(BaseView):
             self.ctx.reload_refdata()
             self.refresh()
         except LedgerError as exc:
-            self.warn(str(exc))
+            self.warn(_tree_language(str(exc)))
 
     def edit(self) -> None:
         tid = self._current_id()

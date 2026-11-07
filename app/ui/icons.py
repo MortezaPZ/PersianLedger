@@ -131,6 +131,25 @@ def _plus(path: QPainterPath) -> None:
     _polyline(path, [(5.5, 12), (18.5, 12)])
 
 
+def _edit(path: QPainterPath) -> None:
+    _polyline(path, [(5, 16.5), (4, 20), (7.5, 19), (19.5, 7), (17, 4.5), (5, 16.5)])
+    _polyline(path, [(15.5, 6.5), (18, 9)])
+    _polyline(path, [(4.5, 21), (20, 21)])
+
+
+def _trash(path: QPainterPath) -> None:
+    _polyline(path, [(5, 7), (19, 7)])
+    _polyline(path, [(9, 7), (9, 4), (15, 4), (15, 7)])
+    _polyline(path, [(7, 8), (8, 20), (16, 20), (17, 8)])
+    _polyline(path, [(10, 10.5), (10.5, 17.5)])
+    _polyline(path, [(14, 10.5), (13.5, 17.5)])
+
+
+def _check(path: QPainterPath) -> None:
+    path.addEllipse(QPointF(12, 12), 8.5, 8.5)
+    _polyline(path, [(7.5, 12), (10.5, 15), (16.5, 9)])
+
+
 _SHAPES = {
     "calendar": _calendar,
     "plus": _plus,
@@ -147,6 +166,9 @@ _SHAPES = {
     "gear": _gear,
     "clock": _clock,
     "chart": _chart,
+    "edit": _edit,
+    "trash": _trash,
+    "check": _check,
 }
 
 PAGE_ICONS = {
