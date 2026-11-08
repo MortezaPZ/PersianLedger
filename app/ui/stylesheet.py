@@ -381,17 +381,7 @@ QListWidget:focus, QPlainTextEdit:focus, QTextEdit:focus {{
     border: 1px solid {focus};
 }}
 QTableCornerButton::section {{ background: {surface_muted}; border: none; }}
-QTreeWidget::branch, QTreeView::branch {{ background: transparent; }}
-QTreeWidget::branch:has-children:closed, QTreeView::branch:has-children:closed {{
-    image: url({tree_plus});
-    width: 16px;
-    height: 16px;
-}}
-QTreeWidget::branch:has-children:open, QTreeView::branch:has-children:open {{
-    image: url({tree_minus});
-    width: 16px;
-    height: 16px;
-}}
+/* Branch indicators are painted by TreeBranchStyle; QSS branch overrides hang on Windows Qt. */
 QListWidget::item {{ padding: 5px 8px; min-height: 22px; border-radius: 4px; }}
 QListWidget::indicator, QCheckBox::indicator, QTreeWidget::indicator {{
     width: 15px;
@@ -571,13 +561,9 @@ def build(
     palette: Palette,
     checkmark: str = "",
     chevron: str = "",
-    tree_plus: str = "",
-    tree_minus: str = "",
 ) -> str:
     return _TEMPLATE.format(
         checkmark=checkmark,
         chevron=chevron,
-        tree_plus=tree_plus,
-        tree_minus=tree_minus,
         **palette.__dict__,
     )

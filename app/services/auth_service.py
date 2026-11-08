@@ -67,6 +67,14 @@ def _validate_username(session: Session, username: str, *, exclude_id: int | Non
     return username
 
 
+def _normalize_role(role: UserRole | str) -> UserRole:
+    """Qt widgets may return a str even when their item data was a str Enum."""
+    try:
+        return role if isinstance(role, UserRole) else UserRole(role)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("نقش کاربر معتبر نیست.") from exc
+
+
 def permissions_of(user: User) -> set[Perm]:
     return set(ROLE_PERMS.get(user.role, set()))
 
@@ -96,7 +104,7 @@ def create_user(
     display_name: str,
     password: str,
     is_admin: bool = False,
-    role: UserRole | None = None,
+    role: UserRole | str | None = None,
     created_by: int | None = None,
     user_id: int | None = None,
 ) -> User:
@@ -109,6 +117,7 @@ def create_user(
         raise ValidationError("رمز عبور باید حداقل ۴ نویسه باشد.")
     if role is None:
         role = UserRole.ADMIN if is_admin else UserRole.ACCOUNTANT
+    role = _normalize_role(role)
     is_admin = role == UserRole.ADMIN
     row = User(
         username=username,
@@ -152,8 +161,9 @@ def set_active(session: Session, user: User, is_active: bool, *, user_id: int | 
     )
 
 
-def set_role(session: Session, user: User, role: UserRole, *, user_id: int | None = None) -> None:
+def set_role(session: Session, user: User, role: UserRole | str, *, user_id: int | None = None) -> None:
     require(session, user_id, Perm.USERS_MANAGE)
+    role = _normalize_role(role)
     user.role = role
     user.is_admin = role == UserRole.ADMIN
     audit.record(session, entity_type="User", action=AuditAction.UPDATE, entity_id=user.id, user_id=user_id, note=f"role={role.value}")

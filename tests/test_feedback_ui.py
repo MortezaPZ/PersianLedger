@@ -95,8 +95,12 @@ def test_accounts_tree_defaults_to_moin_without_tafsili(qapp, tmp_path):
 
 
 def test_accounts_tree_disclosure_clicks_keep_page_responsive(qapp, tmp_path):
-    from PySide6.QtCore import QPoint
+    from PySide6.QtCore import QPoint, QRect
+    from PySide6.QtGui import QImage, QPainter
+    from PySide6.QtWidgets import QStyle, QStyleOption
+
     from PySide6.QtTest import QTest
+    from app.ui import icons, theme
     from app.ui.main_window import MainWindow
 
     ctx = _ctx(tmp_path)
@@ -110,6 +114,24 @@ def test_accounts_tree_disclosure_clicks_keep_page_responsive(qapp, tmp_path):
     view = next(view for view in window.views if isinstance(view, AccountsView))
     tree = view.tree
     assert not tree.isAnimated()
+    assert "QTreeWidget::branch:has-children:closed" not in qapp.styleSheet()
+    assert isinstance(theme._tree_branch_style, icons.TreeBranchStyle)
+
+    def branch_icon(opened):
+        image = QImage(16, 16, QImage.Format_ARGB32_Premultiplied)
+        image.fill(Qt.transparent)
+        option = QStyleOption()
+        option.rect = QRect(0, 0, 16, 16)
+        option.state = QStyle.State_Enabled | QStyle.State_Children
+        if opened:
+            option.state |= QStyle.State_Open
+        painter = QPainter(image)
+        theme._tree_branch_style.drawPrimitive(QStyle.PE_IndicatorBranch, option, painter)
+        painter.end()
+        return image
+
+    assert branch_icon(False).pixelColor(8, 5).alpha() > 0
+    assert branch_icon(True).pixelColor(8, 5).alpha() == 0
     group = tree.topLevelItem(0)
     assert group is not None and group.childCount() > 0 and group.isExpanded()
     branch = tree.visualItemRect(group)
@@ -622,6 +644,43 @@ def test_auth_service_hash_and_authenticate_roundtrip(tmp_path):
         assert ok.is_admin
         bad = auth_service.authenticate(db, "admin", "wrong")
         assert bad is None
+
+
+def test_user_dialog_saves_new_user_selected_from_role_combo(qapp, tmp_path):
+    from sqlalchemy import select
+    from PySide6.QtWidgets import QDialog
+    from app.db.models import User
+    from app.domain.enums import UserRole
+    from app.ui.views.settings_view import UserDialog
+
+    ctx = _ctx(tmp_path)
+    dialog = UserDialog(ctx)
+    dialog.username.setText("new-account")
+    dialog.display_name.setText("کاربر تازه")
+    dialog.password.setText("pass1234")
+    dialog.role.setCurrentIndex(dialog.role.findData(UserRole.ACCOUNTANT))
+
+    # Qt exposes str Enum user data as a plain str; this is the exact value
+    # the save action passes to the authentication service.
+    assert dialog.role.currentData() == UserRole.ACCOUNTANT.value
+    assert isinstance(dialog.role.currentData(), str)
+    dialog.accept()
+
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    with ctx.read_session() as db:
+        user = db.scalar(select(User).where(User.username == "new-account"))
+        assert user is not None
+        assert user.display_name == "کاربر تازه"
+        assert user.role == UserRole.ACCOUNTANT
+
+    edit = UserDialog(ctx, user=user)
+    edit.role.setCurrentIndex(edit.role.findData(UserRole.VIEWER))
+    assert isinstance(edit.role.currentData(), str)
+    edit.accept()
+    with ctx.read_session() as db:
+        updated = db.scalar(select(User).where(User.username == "new-account"))
+        assert updated is not None
+        assert updated.role == UserRole.VIEWER
 
 
 def test_login_dialog_first_run_creates_admin(qapp, tmp_path):

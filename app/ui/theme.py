@@ -6,13 +6,14 @@ from pathlib import Path
 
 from PySide6.QtCore import QLocale, Qt
 from PySide6.QtGui import QFont, QFontDatabase
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QStyleFactory
 
 from app.ui import icons, palette as palette_module, stylesheet as stylesheet_module
 
 _PERSIAN_FALLBACKS = ("Vazirmatn", "Sahel", "IRANSans", "Segoe UI", "Tahoma")
 log = logging.getLogger("theme")
 _fonts_loaded = False
+_tree_branch_style: icons.TreeBranchStyle | None = None
 
 
 def palette(dark: bool = False) -> palette_module.Palette:
@@ -46,18 +47,6 @@ def stylesheet(dark: bool = False) -> str:
         pal,
         checkmark=_glyph_url("checkmark", pal, icons.write_checkmark, pal.text_on_brand),
         chevron=_glyph_url("chevron", pal, icons.write_chevron, pal.text_muted),
-        tree_plus=_glyph_url(
-            "tree-plus",
-            pal,
-            lambda path, colour: icons.write_tree_branch(path, colour, expanded=False),
-            pal.brand,
-        ),
-        tree_minus=_glyph_url(
-            "tree-minus",
-            pal,
-            lambda path, colour: icons.write_tree_branch(path, colour, expanded=True),
-            pal.brand,
-        ),
     )
 
 
@@ -99,9 +88,17 @@ def pick_font() -> QFont:
 
 
 def apply(app: QApplication, dark: bool = False) -> None:
+    global _tree_branch_style
     _load_bundled_fonts()
     locale = QLocale(QLocale.Persian, QLocale.Iran)
     QLocale.setDefault(locale)
+    pal = palette_module.get(dark)
+    if _tree_branch_style is None:
+        base_style = QStyleFactory.create(app.style().objectName())
+        _tree_branch_style = icons.TreeBranchStyle(base_style, pal.brand)
+        app.setStyle(_tree_branch_style)
+    else:
+        _tree_branch_style.set_branch_color(pal.brand)
     app.setLayoutDirection(Qt.RightToLeft)
     app.setFont(pick_font())
     app.setProperty("darkMode", dark)

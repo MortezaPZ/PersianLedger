@@ -7,12 +7,42 @@ frozen build.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QLineF, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import QProxyStyle, QStyle
 
 # Icons are authored on a 24x24 grid, like most line-icon sets.
 _GRID = 24.0
 _cache: dict[tuple[str, str, int], QIcon] = {}
+
+
+class TreeBranchStyle(QProxyStyle):
+    def __init__(self, base_style, color: str) -> None:
+        super().__init__(base_style)
+        self._branch_color = QColor(color)
+
+    def set_branch_color(self, color: str) -> None:
+        self._branch_color = QColor(color)
+
+    def drawPrimitive(self, element, option, painter, widget=None) -> None:
+        if element != QStyle.PE_IndicatorBranch or not option.state & QStyle.State_Children:
+            return super().drawPrimitive(element, option, painter, widget)
+
+        side = min(option.rect.width(), option.rect.height()) - 5
+        center = QPointF(
+            option.rect.left() + option.rect.width() / 2,
+            option.rect.top() + option.rect.height() / 2,
+        )
+        rect = QRectF(center.x() - side / 2, center.y() - side / 2, side, side)
+        half_span = side * 0.27
+        painter.save()
+        painter.setPen(QPen(self._branch_color, 1.25))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(rect, 2.0, 2.0)
+        painter.drawLine(QLineF(center.x() - half_span, center.y(), center.x() + half_span, center.y()))
+        if not option.state & QStyle.State_Open:
+            painter.drawLine(QLineF(center.x(), center.y() - half_span, center.x(), center.y() + half_span))
+        painter.restore()
 
 
 def _rounded_rect(path: QPainterPath, x, y, w, h, r) -> None:
@@ -291,26 +321,6 @@ def write_chevron(path, color: str = "#64748b", size: int = 12) -> str:
     path_ = QPainterPath()
     _polyline(path_, [(6, 9.5), (12, 15.5), (18, 9.5)])
     painter.drawPath(path_)
-    painter.end()
-    pix.save(str(path), "PNG")
-    return str(path).replace("\\", "/")
-
-
-def write_tree_branch(path, color: str = "#64748b", expanded: bool = False, size: int = 16) -> str:
-    """Render a clear +/- disclosure button for a tree branch."""
-    pix = QPixmap(size, size)
-    pix.fill(Qt.transparent)
-    painter = QPainter(pix)
-    painter.setRenderHint(QPainter.Antialiasing, True)
-    pen = QPen(QColor(color))
-    pen.setWidthF(1.25)
-    painter.setPen(pen)
-    painter.setBrush(Qt.NoBrush)
-    painter.drawRoundedRect(2.5, 2.5, size - 5, size - 5, 2.0, 2.0)
-    center = size / 2
-    painter.drawLine(int(size * 0.32), int(center), int(size * 0.68), int(center))
-    if not expanded:
-        painter.drawLine(int(center), int(size * 0.32), int(center), int(size * 0.68))
     painter.end()
     pix.save(str(path), "PNG")
     return str(path).replace("\\", "/")

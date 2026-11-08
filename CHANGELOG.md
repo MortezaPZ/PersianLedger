@@ -1,5 +1,10 @@
 # PersianLedger changelog
 
+## 0.8.7
+
+- Fixed creating and editing users when the role selector returns a string value.
+- Kept floating-detail tree branch controls visible and responsive without the hanging stylesheet branch images.
+
 ## 0.8.6
 
 - Kept the account chart responsive by making branch expansion and collapse immediate.

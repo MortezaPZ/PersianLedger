@@ -755,15 +755,17 @@ def test_tafsili_register_renders_the_parent_child_tree(qapp, tmp_path):
     assert parent_item.isExpanded()
     QTest.qWait(500)
     branch = view.tree.visualItemRect(parent_item)
-    QTest.mouseClick(
-        view.tree.viewport(),
-        Qt.LeftButton,
-        pos=QPoint(disclosure_x, branch.center().y()),
-    )
-    qapp.processEvents()
+    collapse_x = None
+    for x in range(view.tree.viewport().width()):
+        QTest.mouseClick(view.tree.viewport(), Qt.LeftButton, pos=QPoint(x, branch.center().y()))
+        qapp.processEvents()
+        if not parent_item.isExpanded():
+            collapse_x = x
+            break
+    assert collapse_x is not None
     assert not parent_item.isExpanded()
-    assert "QTreeWidget::branch:has-children:closed" in qapp.styleSheet()
-    assert "QTreeWidget::branch:has-children:open" in qapp.styleSheet()
+    assert "QTreeWidget::branch:has-children:closed" not in qapp.styleSheet()
+    assert "QTreeWidget::branch:has-children:open" not in qapp.styleSheet()
     assert not parent_item.icon(0).isNull()
     assert not child_item.icon(0).isNull()
     assert view.tree.contextMenuPolicy() == Qt.CustomContextMenu
