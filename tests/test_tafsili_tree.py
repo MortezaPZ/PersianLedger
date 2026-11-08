@@ -23,7 +23,15 @@ from app.db.engine import build_engine
 from app.domain.errors import ConcurrencyError, ValidationError
 from app.services import document_service, master_data
 from app.ui.refdata import RefData
-from app.ui.widgets.line_grid import CLEAR_TAFSILI, COL_ACCOUNT, COL_T1, COL_T2, LineGridModel, TafsiliDelegate
+from app.ui.widgets.line_grid import (
+    CLEAR_TAFSILI,
+    COL_ACCOUNT,
+    COL_T1,
+    COL_T2,
+    LineGridModel,
+    TafsiliDelegate,
+)
+from app.ui.widgets.tree_picker import TreePickerDialog
 
 
 def _balanced_input(session, first_account, *, tafsili1_id=None, tafsili2_id=None):
@@ -168,6 +176,64 @@ def test_document_line_picker_blocks_duplicate_between_tafsili_slots(db_session,
     legacy_duplicate.setCurrentIndex(legacy_duplicate.findData(CLEAR_TAFSILI))
     second_delegate.setModelData(legacy_duplicate, model, second_index)
     assert model.rows[0].tafsili2_id is None
+
+
+@pytest.mark.parametrize("slot,column", [(1, COL_T1), (2, COL_T2)])
+def test_document_tafsili_picker_stays_disabled_until_account_is_selected(db_session, qapp, slot, column):
+    seed.seed_base(db_session)
+    account = db_session.execute(select(Account).where(Account.code == "1001")).scalar_one()
+    tafsili = db_session.execute(select(Tafsili).where(Tafsili.code == "1101")).scalar_one()
+    if slot == 2:
+        group = db_session.execute(select(TafsiliGroup).where(TafsiliGroup.code == "20")).scalar_one()
+        account.tafsili_rules.append(AccountTafsiliRule(tafsili_group_id=group.id, slot=slot))
+        db_session.flush()
+    model = LineGridModel(RefData.load(db_session))
+    account_index = model.index(0, COL_ACCOUNT)
+    tafsili_index = model.index(0, column)
+    delegate = TafsiliDelegate(slot)
+
+    assert not model.flags(tafsili_index) & Qt.ItemIsEditable
+    assert not model.setData(tafsili_index, tafsili.id)
+    assert delegate.tree_choices(tafsili_index) == []
+    editor = delegate.createEditor(None, None, tafsili_index)
+    assert not editor.isEnabled()
+    assert "ابتدا سرفصل" in editor.currentText()
+    editor.close()
+
+    assert model.setData(account_index, account.id)
+    assert model.flags(tafsili_index) & Qt.ItemIsEditable
+    choices = {ident: selectable for ident, _label, _parent, selectable in delegate.tree_choices(tafsili_index)}
+    assert choices[tafsili.id]
+    assert model.setData(tafsili_index, tafsili.id)
+
+
+def test_tree_picker_search_keeps_matching_paths_and_hides_unrelated_nodes(qapp):
+    dialog = TreePickerDialog(
+        "انتخاب از درخت",
+        [
+            (1, "حساب‌های اصلی", None, False),
+            (2, "دارایی‌ها", 1, False),
+            (3, "صندوق شعبه مرکزی", 2, True),
+            (4, "بدهی‌ها", 1, False),
+            (5, "وام بلندمدت", 4, True),
+        ],
+    )
+    root = dialog.tree.topLevelItem(0)
+    assets, debts = root.child(0), root.child(1)
+    branch, loan = assets.child(0), debts.child(0)
+
+    dialog.search.setText("شعبه مرکزی")
+
+    assert not root.isHidden()
+    assert not assets.isHidden()
+    assert not branch.isHidden()
+    assert root.isExpanded() and assets.isExpanded()
+    assert debts.isHidden() and loan.isHidden()
+    dialog.tree.setCurrentItem(branch)
+    assert dialog.selected_id == 3
+    dialog.search.clear()
+    assert not debts.isHidden() and not loan.isHidden()
+    dialog.close()
 
 
 def test_specific_parent_rule_allows_descendant_leaf(db_session):
@@ -630,6 +696,9 @@ def test_sqlite_tree_migration_refuses_active_foreign_key_transaction_without_ch
 
 
 def test_tafsili_register_renders_the_parent_child_tree(qapp, tmp_path):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+
     from app import bootstrap, config as config_module
     from app.ui.context import AppContext
     from app.ui.views.tafsili_view import TafsiliView
@@ -647,6 +716,9 @@ def test_tafsili_register_renders_the_parent_child_tree(qapp, tmp_path):
         parent_id, child_id = parent.id, child.id
     context.reload_refdata()
     view = TafsiliView(context)
+    view.resize(1100, 700)
+    view.show()
+    qapp.processEvents()
 
     def find_item(item_id):
         def walk(node):
@@ -669,7 +741,29 @@ def test_tafsili_register_renders_the_parent_child_tree(qapp, tmp_path):
     assert parent_item is not None
     assert child_item is not None
     assert child_item.parent() is parent_item
+    assert not parent_item.isExpanded()
+    branch = view.tree.visualItemRect(parent_item)
+    assert branch.isValid()
+    disclosure_x = None
+    for x in range(view.tree.viewport().width()):
+        QTest.mouseClick(view.tree.viewport(), Qt.LeftButton, pos=QPoint(x, branch.center().y()))
+        qapp.processEvents()
+        if parent_item.isExpanded():
+            disclosure_x = x
+            break
+    assert disclosure_x is not None
     assert parent_item.isExpanded()
+    QTest.qWait(500)
+    branch = view.tree.visualItemRect(parent_item)
+    QTest.mouseClick(
+        view.tree.viewport(),
+        Qt.LeftButton,
+        pos=QPoint(disclosure_x, branch.center().y()),
+    )
+    qapp.processEvents()
+    assert not parent_item.isExpanded()
+    assert "QTreeWidget::branch:has-children:closed" in qapp.styleSheet()
+    assert "QTreeWidget::branch:has-children:open" in qapp.styleSheet()
     assert not parent_item.icon(0).isNull()
     assert not child_item.icon(0).isNull()
     assert view.tree.contextMenuPolicy() == Qt.CustomContextMenu

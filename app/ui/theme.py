@@ -46,6 +46,18 @@ def stylesheet(dark: bool = False) -> str:
         pal,
         checkmark=_glyph_url("checkmark", pal, icons.write_checkmark, pal.text_on_brand),
         chevron=_glyph_url("chevron", pal, icons.write_chevron, pal.text_muted),
+        tree_plus=_glyph_url(
+            "tree-plus",
+            pal,
+            lambda path, colour: icons.write_tree_branch(path, colour, expanded=False),
+            pal.brand,
+        ),
+        tree_minus=_glyph_url(
+            "tree-minus",
+            pal,
+            lambda path, colour: icons.write_tree_branch(path, colour, expanded=True),
+            pal.brand,
+        ),
     )
 
 

@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
+    QLineEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -31,6 +32,11 @@ class TreePickerDialog(QDialog):
         self.resize(620, 520)
         self.selected_id: int | None = None
         layout = QVBoxLayout(self)
+        self.search = QLineEdit()
+        self.search.setObjectName("TreePickerSearch")
+        self.search.setPlaceholderText("جست‌وجو در درخت…")
+        self.search.setClearButtonEnabled(True)
+        layout.addWidget(self.search)
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -62,11 +68,44 @@ class TreePickerDialog(QDialog):
                 nodes[parent_id].addChild(node)
             else:
                 self.tree.addTopLevelItem(node)
-        self.tree.expandAll()
         if selected_id in nodes:
             self.tree.setCurrentItem(nodes[selected_id])
+            parent_node = nodes[selected_id].parent()
+            while parent_node is not None:
+                parent_node.setExpanded(True)
+                parent_node = parent_node.parent()
         self.tree.currentItemChanged.connect(self._selection_changed)
+        self.search.textChanged.connect(self._filter_tree)
         self._selection_changed(self.tree.currentItem(), None)
+
+    def _filter_tree(self, query: str) -> None:
+        needle = (query or "").strip().casefold()
+        def visit(item: QTreeWidgetItem, parent_matches: bool = False) -> bool:
+            matches = bool(needle) and needle in item.text(0).casefold()
+            show_subtree = parent_matches or matches
+            descendant_matches = False
+            for position in range(item.childCount()):
+                child_matches = visit(item.child(position), show_subtree)
+                descendant_matches = descendant_matches or child_matches
+            visible = not needle or show_subtree or descendant_matches
+            item.setHidden(not visible)
+            if needle and visible and item.childCount() and (show_subtree or descendant_matches):
+                item.setExpanded(True)
+            elif not needle:
+                item.setExpanded(False)
+            return visible
+
+        root = self.tree.invisibleRootItem()
+        for position in range(root.childCount()):
+            visit(root.child(position))
+        current = self.tree.currentItem()
+        if current is not None and current.isHidden():
+            self.tree.setCurrentItem(None)
+        elif not needle and current is not None:
+            parent = current.parent()
+            while parent is not None:
+                parent.setExpanded(True)
+                parent = parent.parent()
 
     def _selection_changed(self, current, _previous) -> None:
         ident = current.data(0, Qt.UserRole) if current else None

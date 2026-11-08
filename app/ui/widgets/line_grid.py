@@ -61,6 +61,8 @@ class LineGridModel(QAbstractTableModel):
         if self.read_only or index.column() == COL_NO:
             return flags
         row = self.rows[index.row()]
+        if index.column() in (COL_T1, COL_T2) and not row.account_id:
+            return flags
         if index.column() in (COL_T1, COL_T2) and row.account_id and not self.ref.slot_enabled(row.account_id, 1 if index.column() == COL_T1 else 2):
             return flags
         return flags | Qt.ItemIsEditable
@@ -132,11 +134,15 @@ class LineGridModel(QAbstractTableModel):
             self._set_account(row, int(value) if value not in (None, "") else None)
         elif column == COL_T1:
             tafsili_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
+            if tafsili_id is not None and not row.account_id:
+                return False
             if tafsili_id is not None and tafsili_id == row.tafsili2_id:
                 return False
             row.tafsili1_id = tafsili_id
         elif column == COL_T2:
             tafsili_id = int(value) if value not in (None, "", NEW_TAFSILI) else None
+            if tafsili_id is not None and not row.account_id:
+                return False
             if tafsili_id is not None and tafsili_id == row.tafsili1_id:
                 return False
             row.tafsili2_id = tafsili_id
@@ -367,12 +373,16 @@ class TafsiliDelegate(PickerDelegate):
     def _fill(self, combo: QComboBox, index: QModelIndex) -> None:
         model: LineGridModel = index.model()
         row = model.rows[index.row()]
+        if not row.account_id:
+            combo.addItem("ابتدا سرفصل را انتخاب کنید", None)
+            combo.setEnabled(False)
+            return
         if row.account_id and not model.ref.slot_enabled(row.account_id, self.slot):
             combo.addItem("تعریف نشده — کلیک کنید", None)
             self.requestConfigure.emit(index.row(), self.slot)
             return
         combo.addItem("", None)
-        items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.final_tafsilis()
+        items = model.ref.tafsilis_for(row.account_id, self.slot)
         current = row.tafsili1_id if self.slot == 1 else row.tafsili2_id
         other = row.tafsili2_id if self.slot == 1 else row.tafsili1_id
         for item in items:
@@ -405,7 +415,9 @@ class TafsiliDelegate(PickerDelegate):
     def tree_choices(self, index: QModelIndex) -> list[TreeChoice]:
         model: LineGridModel = index.model()
         row = model.rows[index.row()]
-        items = model.ref.tafsilis_for(row.account_id, self.slot) if row.account_id else model.ref.final_tafsilis()
+        if not row.account_id:
+            return []
+        items = model.ref.tafsilis_for(row.account_id, self.slot)
         current = row.tafsili1_id if self.slot == 1 else row.tafsili2_id
         other = row.tafsili2_id if self.slot == 1 else row.tafsili1_id
         eligible = {item.id for item in items if item.id != other}

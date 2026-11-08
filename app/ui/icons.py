@@ -294,3 +294,23 @@ def write_chevron(path, color: str = "#64748b", size: int = 12) -> str:
     painter.end()
     pix.save(str(path), "PNG")
     return str(path).replace("\\", "/")
+
+
+def write_tree_branch(path, color: str = "#64748b", expanded: bool = False, size: int = 16) -> str:
+    """Render a clear +/- disclosure button for a tree branch."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(QColor(color))
+    pen.setWidthF(1.25)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    painter.drawRoundedRect(2.5, 2.5, size - 5, size - 5, 2.0, 2.0)
+    center = size / 2
+    painter.drawLine(int(size * 0.32), int(center), int(size * 0.68), int(center))
+    if not expanded:
+        painter.drawLine(int(center), int(size * 0.32), int(center), int(size * 0.68))
+    painter.end()
+    pix.save(str(path), "PNG")
+    return str(path).replace("\\", "/")

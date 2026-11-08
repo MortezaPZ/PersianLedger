@@ -94,6 +94,50 @@ def test_accounts_tree_defaults_to_moin_without_tafsili(qapp, tmp_path):
     assert "slot" not in seen
 
 
+def test_accounts_tree_disclosure_clicks_keep_page_responsive(qapp, tmp_path):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+    from app.ui.main_window import MainWindow
+
+    ctx = _ctx(tmp_path)
+    window = MainWindow(ctx)
+    window.resize(1100, 700)
+    window.show()
+    qapp.processEvents()
+    window._navigate_key("accounts")
+    qapp.processEvents()
+
+    view = next(view for view in window.views if isinstance(view, AccountsView))
+    tree = view.tree
+    assert not tree.isAnimated()
+    group = tree.topLevelItem(0)
+    assert group is not None and group.childCount() > 0 and group.isExpanded()
+    branch = tree.visualItemRect(group)
+    assert branch.isValid()
+    disclosure_x = None
+    for x in range(tree.viewport().width()):
+        QTest.mouseClick(tree.viewport(), Qt.LeftButton, pos=QPoint(x, branch.center().y()))
+        qapp.processEvents()
+        if not group.isExpanded():
+            disclosure_x = x
+            break
+    assert disclosure_x is not None
+    disclosure = QPoint(disclosure_x, branch.center().y())
+    group.setExpanded(True)
+    qapp.processEvents()
+
+    for _ in range(5):
+        QTest.mouseClick(tree.viewport(), Qt.LeftButton, pos=disclosure)
+        qapp.processEvents()
+        assert not group.isExpanded()
+        QTest.mouseClick(tree.viewport(), Qt.LeftButton, pos=disclosure)
+        qapp.processEvents()
+        assert group.isExpanded()
+    window.hide()
+    window.deleteLater()
+    qapp.processEvents()
+
+
 def test_link_dialog_stores_the_tafsili_itself_and_hides_it_from_the_tree(qapp, tmp_path):
     from sqlalchemy import select
 
@@ -188,11 +232,13 @@ def test_group_link_is_checked_in_the_tree_dialog(qapp, tmp_path):
 def test_closing_picker_does_not_clear_tafsili(qapp, tmp_path):
     from PySide6.QtWidgets import QComboBox
 
-    from app.ui.widgets.line_grid import COL_T1, TafsiliDelegate
+    from app.ui.widgets.line_grid import COL_ACCOUNT, COL_T1, TafsiliDelegate
 
     ctx = _ctx(tmp_path)
     view = DocumentEntryView(ctx)
-    tafsili = ctx.refdata.tafsilis[0]
+    account = next(account for account in ctx.refdata.postable if ctx.refdata.tafsilis_for(account.id, 1))
+    tafsili = ctx.refdata.tafsilis_for(account.id, 1)[0]
+    view.model.setData(view.model.index(0, COL_ACCOUNT), account.id)
     view.model.setData(view.model.index(0, COL_T1), tafsili.id)
     combo = QComboBox()
     combo.addItem("", None)

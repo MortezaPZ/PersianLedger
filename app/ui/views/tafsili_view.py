@@ -471,7 +471,8 @@ class TafsiliView(BaseView):
         root.setExpanded(True)
         for index in range(root.childCount()):
             root.child(index).setExpanded(True)
-        self.tree.expandToDepth(3)
+        # Keep detail branches collapsed initially so their + controls remain
+        # visible; users can expand only the paths they need to inspect.
         self._reloading = False
 
         target = root

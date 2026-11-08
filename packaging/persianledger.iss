@@ -1,7 +1,7 @@
 ; Installs the program and keeps existing data.
 ; The first install copies a previous portable data folder when one is found.
 
-#define AppVersion "0.8.4"
+#define AppVersion "0.8.6"
 #define DistDir "..\dist\PersianLedger"
 
 [Setup]

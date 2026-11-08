@@ -1,5 +1,11 @@
 # PersianLedger changelog
 
+## 0.8.6
+
+- Kept the account chart responsive by making branch expansion and collapse immediate.
+- Preserved the searchable hierarchy in document account and detail pickers, and kept both detail fields disabled until an account is selected.
+- Kept the floating-detail register tree collapsible with visible plus/minus branch controls.
+
 ## 0.8.3
 
 - Refined the light and dark palettes, improving contrast for helper text, controls, and table headers.

@@ -162,6 +162,9 @@ class AccountsView(BaseView):
         self.body.addLayout(bar)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["کد / عنوان", "نوع", "وضعیت"])
+        # This tree is rebuilt synchronously whenever its page is opened;
+        # keep branch updates immediate during that navigation refresh.
+        self.tree.setAnimated(False)
         self.tree.itemDoubleClicked.connect(lambda *_: self.edit())
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._menu)
