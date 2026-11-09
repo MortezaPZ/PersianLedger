@@ -8,7 +8,7 @@ import os
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from app.db.models import User
+from app.db.models import AuditLog, Document, User
 from app.db.types import utcnow
 from app.domain.enums import AuditAction, UserRole
 from app.domain.errors import PermissionDeniedError, ValidationError
@@ -53,6 +53,14 @@ def has_any_users(session: Session) -> bool:
 
 def list_users(session: Session) -> list[User]:
     return list(session.execute(select(User).order_by(User.username)).scalars())
+
+
+def list_active_users(session: Session) -> list[User]:
+    return list(
+        session.execute(
+            select(User).where(User.is_active.is_(True)).order_by(User.username)
+        ).scalars()
+    )
 
 
 def _validate_username(session: Session, username: str, *, exclude_id: int | None = None) -> str:
@@ -171,6 +179,54 @@ def set_role(session: Session, user: User, role: UserRole | str, *, user_id: int
 
 def set_admin(session: Session, user: User, is_admin: bool, *, user_id: int | None = None) -> None:
     set_role(session, user, UserRole.ADMIN if is_admin else UserRole.ACCOUNTANT, user_id=user_id)
+
+
+def delete_user(session: Session, target_id: int, *, user_id: int | None) -> None:
+    """Delete an unused account without erasing document or audit attribution."""
+    if user_id is None:
+        raise PermissionDeniedError()
+    actor = require(session, user_id, Perm.USERS_MANAGE)
+    target = session.get(User, target_id)
+    if target is None:
+        raise ValidationError("کاربر انتخاب‌شده پیدا نشد.")
+    if actor is not None and target.id == actor.id:
+        raise ValidationError("امکان حذف حسابی که با آن وارد شده‌اید وجود ندارد.")
+
+    if target.is_active and target.role == UserRole.ADMIN:
+        active_admin_ids = session.execute(
+            select(User.id).where(User.is_active.is_(True), User.role == UserRole.ADMIN)
+        ).scalars().all()
+        if len(active_admin_ids) <= 1:
+            raise ValidationError("حذف آخرین مدیر فعال مجاز نیست.")
+
+    has_document_history = session.execute(
+        select(
+            exists().where(
+                (Document.created_by_user_id == target.id)
+                | (Document.posted_by_user_id == target.id)
+            )
+        )
+    ).scalar()
+    has_audit_history = session.execute(
+        select(exists().where(AuditLog.user_id == target.id))
+    ).scalar()
+    if has_document_history or has_audit_history:
+        raise ValidationError(
+            "این کاربر در سوابق اسناد یا گزارش رخدادها ثبت شده است؛ "
+            "برای قطع دسترسی، وضعیت او را غیرفعال کنید."
+        )
+
+    audit.record(
+        session,
+        entity_type="User",
+        action=AuditAction.PURGE,
+        entity_id=target.id,
+        user_id=user_id,
+        before={"username": target.username, "display_name": target.display_name},
+        note="user account deleted",
+    )
+    session.delete(target)
+    session.flush()
 
 
 def authenticate(session: Session, username: str, password: str) -> User | None:

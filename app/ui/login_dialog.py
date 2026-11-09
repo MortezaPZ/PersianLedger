@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QComboBox,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -42,21 +43,37 @@ class LoginDialog(QDialog):
         self.setWindowTitle(f"ورود — {APP_NAME_FA}")
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self.username_edit = QLineEdit()
+        with self.ctx.read_session() as db:
+            users = [
+                (user.username, user.display_name)
+                for user in auth_service.list_active_users(db)
+            ]
+        self.username_combo = QComboBox()
+        for username, display_name in users:
+            self.username_combo.addItem(f"{display_name} ({username})", username)
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.Password)
         self.password_edit.returnPressed.connect(self.accept)
-        form.addRow("نام کاربری", self.username_edit)
+        form.addRow("نام کاربری", self.username_combo)
         form.addRow("رمز عبور", self.password_edit)
         layout.addLayout(form)
+        self.no_active_users_hint = None
+        if not users:
+            self.no_active_users_hint = QLabel(
+                "هیچ کاربر فعالی وجود ندارد. مدیر باید دسترسی یک کاربر را فعال کند."
+            )
+            self.no_active_users_hint.setWordWrap(True)
+            layout.addWidget(self.no_active_users_hint)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("ورود")
+        self.login_button = buttons.button(QDialogButtonBox.Ok)
+        self.login_button.setText("ورود")
+        self.login_button.setEnabled(bool(users))
         buttons.button(QDialogButtonBox.Cancel).setText("انصراف")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._add_connection_row(layout)
-        self.username_edit.setFocus()
+        self.password_edit.setFocus()
 
     def _build_first_run(self) -> None:
         self.setWindowTitle(f"ایجاد حساب مدیر — {APP_NAME_FA}")
@@ -107,7 +124,9 @@ class LoginDialog(QDialog):
 
     def _accept_login(self) -> None:
         with self.ctx.session() as db:
-            user = auth_service.authenticate(db, self.username_edit.text(), self.password_edit.text())
+            user = auth_service.authenticate(
+                db, self.username_combo.currentData() or "", self.password_edit.text()
+            )
             if user is None:
                 QMessageBox.warning(self, APP_NAME_FA, "نام کاربری یا رمز عبور اشتباه است.")
                 self.password_edit.clear()

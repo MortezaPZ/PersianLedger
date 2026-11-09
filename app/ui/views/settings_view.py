@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -50,6 +51,7 @@ class UserDialog(QDialog):
         self.username = QLineEdit()
         self.display_name = QLineEdit()
         self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
+        self.confirm_password = None
         self.role = QComboBox()
         for role, label in USER_ROLE_FA.items():
             self.role.addItem(label, role)
@@ -69,6 +71,9 @@ class UserDialog(QDialog):
             form.addRow(self.is_active)
         else:
             form.addRow("رمز عبور", self.password)
+            self.confirm_password = QLineEdit()
+            self.confirm_password.setEchoMode(QLineEdit.Password)
+            form.addRow("تکرار رمز عبور", self.confirm_password)
         form.addRow("نقش", self.role)
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         fields.localize_dialog_buttons(buttons)
@@ -77,6 +82,9 @@ class UserDialog(QDialog):
         form.addRow(buttons)
 
     def accept(self) -> None:
+        if self.user is None and self.password.text() != self.confirm_password.text():
+            QMessageBox.warning(self, APP_NAME_FA, "رمز عبور و تکرار آن یکسان نیستند.")
+            return
         try:
             with self.ctx.session() as db:
                 if self.user is None:
@@ -97,7 +105,6 @@ class UserDialog(QDialog):
                     auth_service.set_active(db, row, self.is_active.isChecked(), user_id=self.ctx.user_id)
             super().accept()
         except LedgerError as exc:
-            from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, APP_NAME_FA, str(exc))
 
 
@@ -112,9 +119,12 @@ class UsersDialog(QDialog):
         bar = QHBoxLayout()
         add = QPushButton("کاربر جدید"); add.setProperty("kind", "primary")
         edit = QPushButton("ویرایش")
+        self.delete_button = QPushButton("حذف کاربر")
+        self.delete_button.setProperty("kind", "danger")
         add.clicked.connect(self.add_user)
         edit.clicked.connect(self.edit_user)
-        bar.addWidget(add); bar.addWidget(edit); bar.addStretch()
+        self.delete_button.clicked.connect(self.delete_user)
+        bar.addWidget(add); bar.addWidget(edit); bar.addWidget(self.delete_button); bar.addStretch()
         layout.addLayout(bar)
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["نام کاربری", "نام نمایشی", "نقش", "وضعیت"])
@@ -159,6 +169,27 @@ class UsersDialog(QDialog):
             return
         if UserDialog(self.ctx, self, user=user).exec():
             self.reload()
+
+    def delete_user(self) -> None:
+        user = self._selected()
+        if user is None:
+            QMessageBox.information(self, APP_NAME_FA, "ابتدا یک کاربر را انتخاب کنید.")
+            return
+        answer = QMessageBox.question(
+            self,
+            APP_NAME_FA,
+            f"حساب کاربری «{user.username}» حذف شود؟",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            with self.ctx.session() as db:
+                auth_service.delete_user(db, user.id, user_id=self.ctx.user_id)
+            self.reload()
+        except LedgerError as exc:
+            QMessageBox.warning(self, APP_NAME_FA, str(exc))
 
 
 class CurrencyDialog(QDialog):

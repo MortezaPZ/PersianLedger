@@ -769,7 +769,10 @@ def test_tafsili_register_renders_the_parent_child_tree(qapp, tmp_path):
     assert not parent_item.icon(0).isNull()
     assert not child_item.icon(0).isNull()
     assert view.tree.contextMenuPolicy() == Qt.CustomContextMenu
-    assert "::branch:has-siblings" in view.tree.styleSheet()
+    assert "::branch" not in view.tree.styleSheet()
+    from app.ui import icons, theme
+
+    assert isinstance(theme._tree_branch_style, icons.TreeBranchStyle)
     assert "والد" not in view.hint and "فرزند" not in view.hint
     from app.ui.views.tafsili_view import _tree_language
 

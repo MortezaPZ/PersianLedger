@@ -122,7 +122,12 @@ def test_accounts_tree_disclosure_clicks_keep_page_responsive(qapp, tmp_path):
         image.fill(Qt.transparent)
         option = QStyleOption()
         option.rect = QRect(0, 0, 16, 16)
-        option.state = QStyle.State_Enabled | QStyle.State_Children
+        option.state = (
+            QStyle.State_Enabled
+            | QStyle.State_Item
+            | QStyle.State_Sibling
+            | QStyle.State_Children
+        )
         if opened:
             option.state |= QStyle.State_Open
         painter = QPainter(image)
@@ -132,6 +137,8 @@ def test_accounts_tree_disclosure_clicks_keep_page_responsive(qapp, tmp_path):
 
     assert branch_icon(False).pixelColor(8, 5).alpha() > 0
     assert branch_icon(True).pixelColor(8, 5).alpha() == 0
+    assert branch_icon(False).pixelColor(8, 1).alpha() > 0  # tree connector above node
+    assert branch_icon(False).pixelColor(8, 14).alpha() > 0  # connector to following sibling
     group = tree.topLevelItem(0)
     assert group is not None and group.childCount() > 0 and group.isExpanded()
     branch = tree.visualItemRect(group)
@@ -658,6 +665,7 @@ def test_user_dialog_saves_new_user_selected_from_role_combo(qapp, tmp_path):
     dialog.username.setText("new-account")
     dialog.display_name.setText("کاربر تازه")
     dialog.password.setText("pass1234")
+    dialog.confirm_password.setText("pass1234")
     dialog.role.setCurrentIndex(dialog.role.findData(UserRole.ACCOUNTANT))
 
     # Qt exposes str Enum user data as a plain str; this is the exact value
@@ -681,6 +689,26 @@ def test_user_dialog_saves_new_user_selected_from_role_combo(qapp, tmp_path):
         updated = db.scalar(select(User).where(User.username == "new-account"))
         assert updated is not None
         assert updated.role == UserRole.VIEWER
+
+
+def test_user_dialog_rejects_password_confirmation_mismatch(qapp, tmp_path):
+    from sqlalchemy import select
+    from PySide6.QtWidgets import QDialog
+    from app.db.models import User
+    from app.ui.views.settings_view import UserDialog
+
+    ctx = _ctx(tmp_path)
+    dialog = UserDialog(ctx)
+    dialog.username.setText("mismatch-user")
+    dialog.password.setText("pass1234")
+    dialog.confirm_password.setText("different")
+    with patch("app.ui.views.settings_view.QMessageBox.warning") as warning:
+        dialog.accept()
+
+    assert warning.call_args.args[-1] == "رمز عبور و تکرار آن یکسان نیستند."
+    assert dialog.result() != QDialog.DialogCode.Accepted
+    with ctx.read_session() as db:
+        assert db.scalar(select(User).where(User.username == "mismatch-user")) is None
 
 
 def test_login_dialog_first_run_creates_admin(qapp, tmp_path):
@@ -707,11 +735,98 @@ def test_login_dialog_rejects_wrong_password(qapp, tmp_path):
         auth_service.create_user(db, username="u1", display_name="کاربر یک", password="rightpass")
     dialog = LoginDialog(ctx)
     assert not dialog._first_run
-    dialog.username_edit.setText("u1")
+    assert dialog.username_combo.currentData() == "u1"
     dialog.password_edit.setText("wrongpass")
     with patch("app.ui.login_dialog.QMessageBox.warning"):
         dialog.accept()
     assert dialog.user_id is None
+
+
+def test_login_dialog_lists_only_active_users_in_combo(qapp, tmp_path):
+    from PySide6.QtWidgets import QComboBox
+    from app.services import auth_service
+    from app.ui.login_dialog import LoginDialog
+
+    ctx = _ctx(tmp_path)
+    with ctx.session() as db:
+        active = auth_service.create_user(db, username="active-login", display_name="کاربر فعال", password="pass1234")
+        inactive = auth_service.create_user(db, username="inactive-login", display_name="کاربر غیرفعال", password="pass1234")
+        auth_service.set_active(db, inactive, False)
+
+    dialog = LoginDialog(ctx)
+    assert isinstance(dialog.username_combo, QComboBox)
+    usernames = [dialog.username_combo.itemData(i) for i in range(dialog.username_combo.count())]
+    assert "active-login" in usernames
+    assert "inactive-login" not in usernames
+    dialog.username_combo.setCurrentIndex(dialog.username_combo.findData("active-login"))
+    dialog.password_edit.setText("pass1234")
+    dialog.accept()
+    assert dialog.username == "active-login"
+
+
+def test_login_dialog_disables_login_when_all_users_are_inactive(qapp, tmp_path):
+    from app.services import auth_service
+    from app.ui.login_dialog import LoginDialog
+
+    ctx = _ctx(tmp_path)
+    with ctx.session() as db:
+        inactive = auth_service.create_user(db, username="disabled-login", display_name="غیرفعال", password="pass1234")
+        auth_service.set_active(db, inactive, False)
+
+    dialog = LoginDialog(ctx)
+    assert not dialog._first_run
+    assert dialog.username_combo.count() == 0
+    assert not dialog.login_button.isEnabled()
+    assert dialog.no_active_users_hint is not None
+
+
+def test_admin_can_delete_unused_user_without_removing_financial_history(qapp, tmp_path):
+    import pytest
+    from sqlalchemy import select
+    from app.db.models import User
+    from app.domain.errors import ValidationError
+    from app.services import auth_service
+
+    ctx = _ctx(tmp_path)
+    with ctx.session() as db:
+        admin = auth_service.create_user(
+            db,
+            username="test-admin",
+            display_name="مدیر آزمون",
+            password="adminpass",
+            role="ADMIN",
+        )
+        admin_id = admin.id
+    with ctx.session() as db:
+        target = auth_service.create_user(
+            db,
+            username="unused-user",
+            display_name="کاربر بدون سابقه",
+            password="pass1234",
+            created_by=admin_id,
+        )
+        target_id = target.id
+    with ctx.session() as db:
+        auth_service.delete_user(db, target_id, user_id=admin_id)
+    with ctx.read_session() as db:
+        assert db.get(User, target_id) is None
+
+    with ctx.session() as db:
+        referenced = auth_service.create_user(
+            db,
+            username="referenced-user",
+            display_name="کاربر دارای سابقه",
+            password="pass1234",
+            created_by=admin_id,
+        )
+        referenced_id = referenced.id
+    with ctx.session() as db:
+        auth_service.authenticate(db, "referenced-user", "pass1234")
+    with ctx.session() as db:
+        with pytest.raises(ValidationError, match="برای قطع دسترسی"):
+            auth_service.delete_user(db, referenced_id, user_id=admin_id)
+    with ctx.read_session() as db:
+        assert db.get(User, referenced_id) is not None
 
 
 def test_settings_shows_user_management_only_for_admins(qapp, tmp_path):

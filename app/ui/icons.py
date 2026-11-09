@@ -25,23 +25,44 @@ class TreeBranchStyle(QProxyStyle):
         self._branch_color = QColor(color)
 
     def drawPrimitive(self, element, option, painter, widget=None) -> None:
-        if element != QStyle.PE_IndicatorBranch or not option.state & QStyle.State_Children:
+        if element != QStyle.PE_IndicatorBranch:
             return super().drawPrimitive(element, option, painter, widget)
 
-        side = min(option.rect.width(), option.rect.height()) - 5
+        has_children = bool(option.state & QStyle.State_Children)
+        side = max(0, min(option.rect.width(), option.rect.height()) - 5) if has_children else 0
         center = QPointF(
             option.rect.left() + option.rect.width() / 2,
             option.rect.top() + option.rect.height() / 2,
         )
-        rect = QRectF(center.x() - side / 2, center.y() - side / 2, side, side)
-        half_span = side * 0.27
         painter.save()
-        painter.setPen(QPen(self._branch_color, 1.25))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawRoundedRect(rect, 2.0, 2.0)
-        painter.drawLine(QLineF(center.x() - half_span, center.y(), center.x() + half_span, center.y()))
-        if not option.state & QStyle.State_Open:
-            painter.drawLine(QLineF(center.x(), center.y() - half_span, center.x(), center.y() + half_span))
+        if option.state & QStyle.State_Item:
+            connector = QColor(self._branch_color)
+            connector.setAlpha(150)
+            painter.setPen(QPen(connector, 1.0))
+            half_side = side / 2
+            gap = half_side + 1 if has_children else 0
+            upper_end = center.y() - gap
+            lower_start = center.y() + gap
+            if option.state & QStyle.State_Sibling:
+                painter.drawLine(QLineF(center.x(), option.rect.top(), center.x(), upper_end))
+                painter.drawLine(QLineF(center.x(), lower_start, center.x(), option.rect.bottom()))
+            else:
+                painter.drawLine(QLineF(center.x(), option.rect.top(), center.x(), upper_end))
+
+            if option.direction == Qt.RightToLeft:
+                painter.drawLine(QLineF(option.rect.right(), center.y(), center.x() + gap, center.y()))
+            else:
+                painter.drawLine(QLineF(option.rect.left(), center.y(), center.x() - gap, center.y()))
+
+        if has_children:
+            rect = QRectF(center.x() - side / 2, center.y() - side / 2, side, side)
+            half_span = side * 0.27
+            painter.setPen(QPen(self._branch_color, 1.25))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRoundedRect(rect, 2.0, 2.0)
+            painter.drawLine(QLineF(center.x() - half_span, center.y(), center.x() + half_span, center.y()))
+            if not option.state & QStyle.State_Open:
+                painter.drawLine(QLineF(center.x(), center.y() - half_span, center.x(), center.y() + half_span))
         painter.restore()
 
 

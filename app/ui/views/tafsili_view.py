@@ -298,17 +298,7 @@ class TafsiliView(BaseView):
         self.tree.setAnimated(True)
         self.tree.setLayoutDirection(Qt.RightToLeft)
         self.tree.setToolTip("گروه‌ها و تفصیلی‌ها را در شاخه‌های درخت مرور کنید.")
-        branch_line = theme.current_palette().line_strong
         self.tree.setStyleSheet(
-            "QTreeWidget#TafsiliStructureTree::branch:has-siblings:!adjoins-item {"
-            f"border-right: 1px solid {branch_line};"
-            "}"
-            "QTreeWidget#TafsiliStructureTree::branch:has-siblings:adjoins-item {"
-            f"border-right: 1px solid {branch_line}; border-bottom: 1px solid {branch_line};"
-            "}"
-            "QTreeWidget#TafsiliStructureTree::branch:!has-siblings:adjoins-item {"
-            f"border-bottom: 1px solid {branch_line};"
-            "}"
             "QTreeWidget#TafsiliStructureTree::item { min-height: 22px; padding: 6px 7px; }"
         )
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
