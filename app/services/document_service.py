@@ -167,9 +167,15 @@ def _check_slot(
         raise ValidationError(f"ردیف {row}: تفصیلی «{tafsili.name}» غیرفعال است.")
 
 
-def validate(session: Session, data: DocumentInput) -> None:
+def validate(
+    session: Session,
+    data: DocumentInput,
+    *,
+    require_all_opening_currencies: bool = True,
+) -> None:
     filled = [ln for ln in data.lines if ln.account_id or money.parse(ln.debit) or money.parse(ln.credit)]
-    if len(filled) < 2:
+    nonzero = [ln for ln in filled if money.parse(ln.debit) or money.parse(ln.credit)]
+    if len(nonzero if data.doc_type == DocumentType.OPENING else filled) < 2:
         raise ValidationError("سند حداقل باید دو ردیف داشته باشد.")
     year = session.get(FiscalYear, data.fiscal_year_id) if data.fiscal_year_id else None
     if year is None:
@@ -218,12 +224,28 @@ def validate(session: Session, data: DocumentInput) -> None:
             raise ValidationError(f"ردیف {index}: مبلغ منفی مجاز نیست.")
         if debit and credit:
             raise ValidationError(f"ردیف {index}: هر ردیف یا بدهکار است یا بستانکار، نه هر دو.")
-        if debit + credit == 0:
+        if debit + credit == 0 and data.doc_type != DocumentType.OPENING:
             raise ValidationError(f"ردیف {index}: مبلغ وارد نشده است.")
         if not money.fits_scale(debit, currency.decimals) or not money.fits_scale(credit, currency.decimals):
             raise ValidationError(f"ردیف {index}: {currency.code} حداکثر {currency.decimals} رقم اعشار دارد.")
         _check_slot(account, account.tafsili_rules, 1, tafsilis.get(line.tafsili1_id) if line.tafsili1_id else None, index)
         _check_slot(account, account.tafsili_rules, 2, tafsilis.get(line.tafsili2_id) if line.tafsili2_id else None, index)
+    if data.doc_type == DocumentType.OPENING and require_all_opening_currencies:
+        active_currency_ids = {cid for cid, currency in currencies.items() if currency.is_active}
+        for account_id, account in accounts.items():
+            account_lines = [line for line in filled if line.account_id == account_id]
+            if not account_lines:
+                continue
+            allowed = {row.currency_id for row in account.allowed_currencies}
+            expected = active_currency_ids & allowed if allowed else active_currency_ids
+            present = {line.currency_id for line in account_lines if line.currency_id is not None}
+            missing = expected - present
+            if missing:
+                codes = "، ".join(sorted(currencies[cid].code for cid in missing))
+                raise ValidationError(
+                    f"برای سرفصل «{account.display}» ردیف افتتاحیهٔ ارزهای {codes} مشخص نشده است؛ "
+                    "اگر ماندهٔ ارز صفر است، ردیف را با مبلغ خالی نگه دارید."
+                )
     balances = balance_by_currency(filled, currencies)
     unbalanced = {
         b.code: money.format_amount(abs(b.difference), b.decimals)
@@ -333,7 +355,10 @@ def post(session: Session, document: Document, user_id: int | None = None) -> Do
             for ln in document.lines
         ],
     )
-    validate(session, data)
+    # Zero opening rows are intentionally not stored. The initial draft save
+    # already checks the complete currency matrix; on posting, the persisted
+    # nonzero rows are revalidated for all ordinary accounting rules.
+    validate(session, data, require_all_opening_currencies=False)
     _ensure_number(session, document)
     document.status = DocumentStatus.POSTED
     document.posted_by_user_id = auth_service.valid_user_id(session, user_id)

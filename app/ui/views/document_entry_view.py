@@ -31,6 +31,7 @@ from app.ui.widgets.jalali_date_edit import JalaliDateEdit
 from app.ui.widgets.line_grid import (
     COL_ACCOUNT,
     COL_CURRENCY,
+    COL_DESC,
     COL_T1,
     COL_T2,
     AccountDelegate,
@@ -66,7 +67,9 @@ class DocumentEntryView(BaseView):
         for item, label in DOCUMENT_TYPE_FA.items():
             if item not in (DocumentType.REVERSAL, DocumentType.CORRECTION):
                 self.type_combo.addItem(label, item)
-        self.type_combo.setToolTip("نوع سند فقط برای دسته‌بندی و گزارش است؛ روی تراز یا شماره اثر ندارد.")
+        self.type_combo.setToolTip(
+            "نوع سند برای دسته‌بندی و گزارش است. در افتتاحیه، ارزهای فعال و مجاز هر سرفصل باید مشخص شوند."
+        )
         self.desc_edit = QLineEdit()
         self.year_combo = QComboBox()
         grid.addWidget(fields.labeled("شماره سند", self.number_edit), 0, 0)
@@ -77,6 +80,13 @@ class DocumentEntryView(BaseView):
         for column in range(4):
             grid.setColumnStretch(column, 1)
         self.body.addWidget(card)
+        self.opening_hint = QLabel(
+            "برای هر سرفصلِ دارای مانده، یک ردیف به‌ازای هر ارز فعال و مجاز داشته باشید؛ "
+            "اگر ماندهٔ ارزی صفر است، مبلغ را خالی بگذارید."
+        )
+        self.opening_hint.setWordWrap(True)
+        self.opening_hint.setVisible(False)
+        self.body.addWidget(self.opening_hint)
         self.model = LineGridModel(self.ctx.refdata)
         self.table = QTableView()
         self.table.setAccessibleName("ردیف‌های سند")
@@ -111,6 +121,14 @@ class DocumentEntryView(BaseView):
         buttons.addWidget(add)
         buttons.addWidget(dup)
         buttons.addWidget(remove)
+        self.opening_currency_btn = QPushButton("تکمیل ارزهای سرفصل")
+        self.opening_currency_btn.setProperty("kind", "secondary")
+        self.opening_currency_btn.setToolTip(
+            "برای سرفصل ردیف جاری، ردیف ارزهای فعال و مجاز را اضافه می‌کند."
+        )
+        self.opening_currency_btn.clicked.connect(self._complete_current_account_currencies)
+        self.opening_currency_btn.setVisible(False)
+        buttons.addWidget(self.opening_currency_btn)
         buttons.addStretch()
         self.save_btn = QPushButton("ذخیره پیش‌نویس")
         self.save_btn.setProperty("kind", "secondary")
@@ -139,8 +157,11 @@ class DocumentEntryView(BaseView):
         bottom.addWidget(self.attachments)
         self.body.addLayout(bottom)
         self.model.totalsChanged.connect(self._refresh_balance)
+        self.model.dataChanged.connect(self._opening_row_changed)
+        self.type_combo.currentIndexChanged.connect(lambda *_: self._update_opening_controls())
         self.ctx.refdataChanged.connect(self.refresh)
         self.refresh()
+        self._update_opening_controls()
         # Trailing column is the line description; let it take the spare width.
         fit_columns(self.table, stretch_last=True)
 
@@ -158,6 +179,12 @@ class DocumentEntryView(BaseView):
         self._refresh_balance()
 
     def _input(self) -> document_service.DocumentInput:
+        opening = self.type_combo.currentData() == DocumentType.OPENING
+        if opening:
+            self._complete_opening_currency_rows()
+        rows = self.model.rows if opening else self.model.filled_rows()
+        if opening:
+            rows = [row for row in rows if row.account_id and row.currency_id is not None]
         return document_service.DocumentInput(
             fiscal_year_id=self.year_combo.currentData(),
             date_g=self.date_edit.gregorian(),
@@ -174,9 +201,92 @@ class DocumentEntryView(BaseView):
                     tafsili2_id=r.tafsili2_id,
                     description=r.description,
                 )
-                for r in self.model.filled_rows()
+                for r in rows
             ],
         )
+
+    def _update_opening_controls(self) -> None:
+        opening = self.type_combo.currentData() == DocumentType.OPENING
+        self.opening_hint.setVisible(opening)
+        self.opening_currency_btn.setVisible(opening)
+        if opening:
+            self._complete_opening_currency_rows()
+
+    def _opening_row_changed(self, top_left, _bottom_right, *_roles) -> None:
+        if self.type_combo.currentData() != DocumentType.OPENING or not top_left.isValid():
+            return
+        if getattr(self, "_syncing_opening_currencies", False):
+            return
+        row = self.model.rows[top_left.row()]
+        # Once the user has started entering this account's opening balance,
+        # add the remaining currency rows using the same tafsili dimensions.
+        if row.account_id and (row.debit or row.credit or row.tafsili1_id or row.tafsili2_id):
+            self._complete_account_currencies(row)
+
+    def _complete_current_account_currencies(self) -> None:
+        index = self.table.currentIndex()
+        if not index.isValid() or not (0 <= index.row() < len(self.model.rows)):
+            self.warn("ابتدا سرفصل را در ردیف جاری انتخاب کنید.")
+            return
+        row = self.model.rows[index.row()]
+        if not row.account_id:
+            self.warn("ابتدا سرفصل را در ردیف جاری انتخاب کنید.")
+            return
+        before = len(self.model.rows)
+        self._complete_account_currencies(row)
+        if len(self.model.rows) == before:
+            self.inform("ردیف ارزهای مجاز این سرفصل از قبل کامل است.")
+
+    def _complete_opening_currency_rows(self) -> None:
+        if getattr(self, "_syncing_opening_currencies", False):
+            return
+        account_ids = list(dict.fromkeys(row.account_id for row in self.model.rows if row.account_id))
+        for account_id in account_ids:
+            row = next(row for row in self.model.rows if row.account_id == account_id)
+            self._complete_account_currencies(row)
+
+    def _complete_account_currencies(self, template: LineRow) -> None:
+        if self.type_combo.currentData() != DocumentType.OPENING or not template.account_id:
+            return
+        currencies = self.ctx.refdata.currencies_for(template.account_id)
+        if not currencies:
+            return
+        existing = {
+            row.currency_id
+            for row in self.model.rows
+            if row.account_id == template.account_id and row.currency_id is not None
+        }
+        missing = [currency.id for currency in currencies if currency.id not in existing]
+        if not missing:
+            return
+
+        account_id = template.account_id
+        tafsili1_id = template.tafsili1_id
+        tafsili2_id = template.tafsili2_id
+        description = template.description
+        self._syncing_opening_currencies = True
+        try:
+            for currency_id in missing:
+                row_index = next(
+                    (
+                        i for i, row in enumerate(self.model.rows)
+                        if row.account_id is None and not row.debit and not row.credit and not row.description
+                    ),
+                    None,
+                )
+                if row_index is None:
+                    self.model.add_row()
+                    row_index = len(self.model.rows) - 1
+                self.model.setData(self.model.index(row_index, COL_ACCOUNT), account_id)
+                if tafsili1_id is not None:
+                    self.model.setData(self.model.index(row_index, COL_T1), tafsili1_id)
+                if tafsili2_id is not None:
+                    self.model.setData(self.model.index(row_index, COL_T2), tafsili2_id)
+                self.model.setData(self.model.index(row_index, COL_CURRENCY), currency_id)
+                if description:
+                    self.model.setData(self.model.index(row_index, COL_DESC), description)
+        finally:
+            self._syncing_opening_currencies = False
 
     def _remember(self, doc) -> None:
         """Keep identity in plain values.
@@ -294,6 +404,8 @@ class DocumentEntryView(BaseView):
                 for ln in doc.lines
             ]
             self.model.set_rows(rows)
+            if doc.doc_type == DocumentType.OPENING:
+                self._complete_opening_currency_rows()
             self.model.read_only = doc.is_posted
             self.attachments.set_document(doc)
 

@@ -239,6 +239,32 @@ def seed_demo(session: Session) -> None:
                     description=desc,
                 )
             )
+        if doc_type == DocumentType.OPENING:
+            accounts_by_id = {
+                account.id: account
+                for account in account_service.all_accounts(session, include_inactive=True)
+            }
+            active_currencies = [currency for currency in master_data.currencies(session) if currency.is_active]
+            for account_id in dict.fromkeys(line.account_id for line in lines):
+                account = accounts_by_id[account_id]
+                allowed = {row.currency_id for row in account.allowed_currencies}
+                expected = [
+                    currency
+                    for currency in active_currencies
+                    if not allowed or currency.id in allowed
+                ]
+                present = {line.currency_id for line in lines if line.account_id == account_id}
+                template = next(line for line in lines if line.account_id == account_id)
+                for currency in expected:
+                    if currency.id not in present:
+                        lines.append(
+                            document_service.LineInput(
+                                account_id=account_id,
+                                currency_id=currency.id,
+                                tafsili1_id=template.tafsili1_id,
+                                tafsili2_id=template.tafsili2_id,
+                            )
+                        )
         document_service.save_and_post(
             session,
             document_service.DocumentInput(
